@@ -1,0 +1,24 @@
+# Core dependencies for InstructGS
+torch>=1.12.0
+pyyaml>=6.0
+numpy>=1.21.0
+Pillow>=9.0.0
+tqdm>=4.64.0
+opencv-python>=4.5.0
+
+# For interactive interface (optional but recommended)
+rich>=12.0.0
+
+# For InstructPix2Pix integration
+diffusers>=0.21.0
+transformers>=4.21.0
+accelerate>=0.20.0
+
+# For perceptual loss
+lpips>=0.1.4
+
+# For gsplat (already in gsplat-src requirements)
+# These are needed if you want to install separately
+# gsplat
+# torch-scatter
+# pycolmap
