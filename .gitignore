@@ -17,13 +17,18 @@ env/
 datasets/
 gsplat-src/
 
+# Model weights
+models/
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+
 # Outputs and results
 outputs/
 test_results/
 results/
-*.pt
-*.pth
-*.ckpt
+outputs_*.zip
 
 # Logs and temp files
 *.log

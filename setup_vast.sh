@@ -46,6 +46,20 @@ else
 fi
 echo ""
 
+# Install GroundingDINO and SAM2
+echo "5.5. Installing GroundingDINO and SAM2..."
+pip install groundingdino-py
+pip install git+https://github.com/facebookresearch/segment-anything-2.git
+echo "✓ GroundingDINO and SAM2 installed"
+echo ""
+
+# Download model weights
+echo "5.6. Downloading model weights..."
+chmod +x download_models.sh
+./download_models.sh
+echo "✓ Model weights downloaded"
+echo ""
+
 # Download dataset
 echo "6. Downloading Mip-NeRF 360 dataset (all scenes, ~2.5GB)..."
 cd gsplat-src/examples
