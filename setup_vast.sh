@@ -20,14 +20,24 @@ pip install gsplat
 echo "✓ gsplat installed"
 echo ""
 
+# Clone gsplat repository (not in git since it's in .gitignore)
+echo "3. Cloning gsplat repository..."
+if [ ! -d "gsplat-src" ]; then
+    git clone https://github.com/nerfstudio-project/gsplat.git gsplat-src
+    echo "✓ gsplat repository cloned"
+else
+    echo "✓ gsplat-src already exists"
+fi
+echo ""
+
 # Install gsplat examples requirements
-echo "3. Installing gsplat examples requirements..."
+echo "4. Installing gsplat examples requirements..."
 pip install -r gsplat-src/examples/requirements.txt
 echo "✓ gsplat examples requirements installed"
 echo ""
 
 # Install project requirements
-echo "4. Installing project requirements..."
+echo "5. Installing project requirements..."
 if [ -f requirements.txt ]; then
     pip install -r requirements.txt
     echo "✓ Project requirements installed"
@@ -37,7 +47,7 @@ fi
 echo ""
 
 # Download dataset
-echo "5. Downloading Mip-NeRF 360 garden dataset..."
+echo "6. Downloading Mip-NeRF 360 garden dataset..."
 cd gsplat-src/examples
 python datasets/download_dataset.py --dataset mipnerf360 --subset garden
 cd ../..
@@ -45,7 +55,7 @@ echo "✓ Dataset downloaded"
 echo ""
 
 # Move dataset to expected location
-echo "6. Moving dataset to correct location..."
+echo "7. Moving dataset to correct location..."
 mkdir -p datasets/360_v2
 if [ -d "gsplat-src/examples/data/360_v2/garden" ]; then
     mv gsplat-src/examples/data/360_v2/garden datasets/360_v2/garden 2>/dev/null || echo "⚠ Dataset already in place"
@@ -56,7 +66,7 @@ fi
 echo ""
 
 # Validate dataset
-echo "7. Validating dataset..."
+echo "8. Validating dataset..."
 python 00_check_dataset.py --data_root datasets/360_v2/garden --factor 4
 echo ""
 
