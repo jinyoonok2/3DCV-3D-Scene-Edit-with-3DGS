@@ -44,6 +44,7 @@ from datasets.colmap import Dataset, Parser
 from fused_ssim import fused_ssim
 from utils import knn, rgb_to_sh, set_random_seed
 
+from gsplat import export_splats
 from gsplat.rendering import rasterization
 from gsplat.strategy import DefaultStrategy
 
@@ -114,6 +115,11 @@ def parse_args():
         type=float,
         default=0.2,
         help="Weight for SSIM loss",
+    )
+    parser.add_argument(
+        "--save_ply",
+        action="store_true",
+        help="Export checkpoint as PLY file for visualization",
     )
     return parser.parse_args()
 
@@ -518,15 +524,29 @@ def main():
         
         train(args, splats, optimizers, trainloader, parser_obj, device, output_dir)
         
-        # Save checkpoint
-        print(f"\nSaving checkpoint to: {ckpt_path}")
-        torch.save({"step": args.iters, "splats": splats.state_dict()}, ckpt_path)
+    # Save checkpoint
+    print(f"\nSaving checkpoint to: {ckpt_path}")
+    torch.save({"step": args.iters, "splats": splats.state_dict()}, ckpt_path)
+    
+    # Export PLY if requested
+    if args.save_ply:
+        ply_path = output_dir / "scene_initial.ply"
+        print(f"Exporting PLY to: {ply_path}")
+        export_splats(
+            means=splats["means"],
+            scales=torch.exp(splats["scales"]),
+            quats=splats["quats"],
+            opacities=torch.sigmoid(splats["opacities"]),
+            sh0=splats["sh0"],
+            shN=splats["shN"],
+            format="ply",
+            save_to=str(ply_path),
+        )
+        print(f"✓ PLY file saved")
     
     # Evaluate
     print("\nEvaluating model...")
-    stats = evaluate_and_render(args, splats, valset, device, output_dir)
-    
-    # Create manifest
+    stats = evaluate_and_render(args, splats, valset, device, output_dir)    # Create manifest
     manifest = {
         "module": "01_train_gs_initial",
         "timestamp": datetime.now().isoformat(),
