@@ -47,19 +47,19 @@ fi
 echo ""
 
 # Download dataset
-echo "6. Downloading Mip-NeRF 360 garden dataset..."
+echo "6. Downloading Mip-NeRF 360 dataset (all scenes, ~2.5GB)..."
 cd gsplat-src/examples
-python datasets/download_dataset.py --dataset mipnerf360 --subset garden
+python datasets/download_dataset.py --dataset mipnerf360
 cd ../..
 echo "✓ Dataset downloaded"
 echo ""
 
 # Move dataset to expected location
-echo "7. Moving dataset to correct location..."
+echo "7. Moving garden dataset to correct location..."
 mkdir -p datasets/360_v2
 if [ -d "gsplat-src/examples/data/360_v2/garden" ]; then
-    mv gsplat-src/examples/data/360_v2/garden datasets/360_v2/garden 2>/dev/null || echo "⚠ Dataset already in place"
-    echo "✓ Dataset moved to datasets/360_v2/garden"
+    cp -r gsplat-src/examples/data/360_v2/garden datasets/360_v2/garden
+    echo "✓ Garden dataset moved to datasets/360_v2/garden"
 else
     echo "⚠ Dataset source not found, may already be in correct location"
 fi
