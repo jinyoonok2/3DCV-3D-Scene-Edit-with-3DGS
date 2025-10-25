@@ -26,6 +26,17 @@ else
     echo "✓ SAM2 Large already exists"
 fi
 
+cd ..
+
+echo ""
+echo "Cloning GroundingDINO repository (for config files)..."
+if [ ! -d "GroundingDINO" ]; then
+    git clone https://github.com/IDEA-Research/GroundingDINO.git
+    echo "✓ GroundingDINO repository cloned"
+else
+    echo "✓ GroundingDINO repository already exists"
+fi
+
 echo ""
 echo "Optional: Download smaller SAM2 models for faster inference"
 echo "Uncomment the following lines if needed:"
@@ -39,11 +50,12 @@ echo ""
 echo "# SAM2 Base Plus"
 echo "# wget https://dl.fbaipublicfiles.com/segment_anything_2/072824/sam2_hiera_base_plus.pt"
 
-cd ..
-
 echo ""
 echo "=================================================="
-echo "Model weights downloaded to: ./models/"
+echo "Setup complete!"
+echo "=================================================="
+echo "Model weights: ./models/"
+echo "Config files: ./GroundingDINO/"
 echo ""
 echo "Files:"
 ls -lh models/
@@ -51,6 +63,4 @@ echo ""
 echo "Total size:"
 du -sh models/
 echo ""
-echo "Next: Install GroundingDINO and SAM2 packages"
-echo "  pip install groundingdino-py"
-echo "  pip install git+https://github.com/facebookresearch/segment-anything-2.git"
+echo "Next: Run 03_ground_text_to_masks.py (no additional setup needed)"

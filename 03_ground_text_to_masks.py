@@ -113,8 +113,8 @@ def parse_args():
     parser.add_argument(
         "--dino_config",
         type=str,
-        default="GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py",
-        help="GroundingDINO config file",
+        default=None,
+        help="GroundingDINO config file (will auto-detect if not provided)",
     )
     parser.add_argument(
         "--dino_checkpoint",
@@ -134,12 +134,64 @@ def parse_args():
         default=42,
         help="Random seed",
     )
+    parser.add_argument(
+        "--max_coverage",
+        type=float,
+        default=None,
+        help="Maximum mask coverage percentage (reject masks larger than this, e.g., 35.0 for 35%%)",
+    )
+    parser.add_argument(
+        "--min_coverage",
+        type=float,
+        default=None,
+        help="Minimum mask coverage percentage (reject masks smaller than this, e.g., 5.0 for 5%%)",
+    )
     return parser.parse_args()
 
 
 def load_grounding_dino(config_path, checkpoint_path, device="cuda"):
     """Load GroundingDINO model."""
+    # Auto-detect config path if not provided
+    if config_path is None:
+        # Try common locations
+        possible_paths = []
+        
+        # Check in site-packages first (groundingdino-py)
+        try:
+            import groundingdino
+            pkg_path = Path(groundingdino.__file__).parent
+            possible_paths.extend([
+                str(pkg_path / "config" / "GroundingDINO_SwinT_OGC.py"),
+                str(pkg_path / "GroundingDINO" / "groundingdino" / "config" / "GroundingDINO_SwinT_OGC.py"),
+            ])
+        except:
+            pass
+        
+        # Check local clone
+        possible_paths.extend([
+            "GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py",
+            "groundingdino/config/GroundingDINO_SwinT_OGC.py",
+        ])
+        
+        for path in possible_paths:
+            if os.path.exists(path):
+                config_path = path
+                break
+        
+        if config_path is None:
+            raise FileNotFoundError(
+                "\n" + "="*80 + "\n"
+                "ERROR: GroundingDINO config file not found!\n"
+                "="*80 + "\n"
+                "Please clone GroundingDINO repository (config files only):\n\n"
+                "  git clone https://github.com/IDEA-Research/GroundingDINO.git\n\n"
+                "Note: You don't need to install it with pip, just having the repo\n"
+                "      cloned for config files is enough.\n"
+                "="*80
+            )
+    
     print(f"Loading GroundingDINO from {checkpoint_path}...")
+    print(f"Using config: {config_path}")
     model = load_model(config_path, checkpoint_path, device=device)
     print("✓ GroundingDINO loaded")
     return model
@@ -206,18 +258,29 @@ def segment_with_sam2(image_np, boxes, sam_predictor):
     # Convert boxes to SAM2 format
     input_boxes = torch.tensor(boxes, device=sam_predictor.device)
     
-    # Predict masks
-    masks, scores, _ = sam_predictor.predict(
-        point_coords=None,
-        point_labels=None,
-        box=input_boxes,
-        multimask_output=False,
-    )
+    # Predict masks for each box individually and combine
+    all_masks = []
+    all_scores = []
+    
+    for box in input_boxes:
+        masks, scores, _ = sam_predictor.predict(
+            point_coords=None,
+            point_labels=None,
+            box=box.unsqueeze(0),  # SAM2 expects (1, 4) for single box
+            multimask_output=False,
+        )
+        # masks shape: (1, 1, H, W) or (1, H, W)
+        # Extract the single mask: (H, W)
+        mask_2d = masks.squeeze()
+        all_masks.append(mask_2d)
+        all_scores.append(scores.max().item())
     
     # Combine masks (take union if multiple detections)
-    if len(masks) > 0:
-        combined_mask = masks.max(axis=0)  # Union of all masks
-        return combined_mask, scores
+    if len(all_masks) > 0:
+        # Stack and take max across masks dimension
+        combined_mask = np.stack(all_masks, axis=0).max(axis=0)  # (H, W)
+        max_score = max(all_scores)
+        return combined_mask, max_score
     
     return None, None
 
@@ -262,10 +325,13 @@ def visualize_overlay(image, mask, output_path):
     
     # Apply mask with transparency
     alpha = 0.5
-    overlay[mask > 0.5] = (
-        alpha * mask_colored[mask > 0.5] + 
-        (1 - alpha) * image[mask > 0.5]
-    ).astype(np.uint8)
+    # Expand mask to 3 channels for proper broadcasting
+    mask_bool = (mask > 0.5)[:, :, np.newaxis]  # (H, W, 1)
+    overlay = np.where(
+        mask_bool,
+        (alpha * mask_colored + (1 - alpha) * image).astype(np.uint8),
+        overlay
+    )
     
     cv2.imwrite(str(output_path), cv2.cvtColor(overlay, cv2.COLOR_RGB2BGR))
 
@@ -395,9 +461,49 @@ def main():
                 failed += 1
                 continue
             
+            # Validate mask dimensions
+            h, w = image_np.shape[:2]
+            if mask.shape != (h, w):
+                print(f"\nWARNING: Mask shape {mask.shape} doesn't match image shape ({h}, {w})")
+                # Resize mask to match image
+                mask = cv2.resize(mask, (w, h), interpolation=cv2.INTER_LINEAR)
+            
             # Calculate coverage
             mask_binary = (mask > 0.5).astype(np.uint8)
             coverage = (mask_binary.sum() / mask_binary.size) * 100
+            
+            # Apply coverage filters if specified
+            if args.max_coverage is not None and coverage > args.max_coverage:
+                print(f"\nFiltered {img_name}: coverage {coverage:.2f}% exceeds max {args.max_coverage}%")
+                coverage_data.append({
+                    "image": img_name,
+                    "num_detections": len(boxes),
+                    "max_score": float(logits.max()),
+                    "mask_coverage": coverage,
+                    "status": "filtered_too_large"
+                })
+                failed += 1
+                # Save empty mask
+                empty_mask = np.zeros((h, w), dtype=np.uint8)
+                cv2.imwrite(str(masks_dir / f"mask_{img_name}.png"), empty_mask)
+                np.save(masks_dir / f"mask_{img_name}.npy", empty_mask.astype(np.float32))
+                continue
+            
+            if args.min_coverage is not None and coverage < args.min_coverage:
+                print(f"\nFiltered {img_name}: coverage {coverage:.2f}% below min {args.min_coverage}%")
+                coverage_data.append({
+                    "image": img_name,
+                    "num_detections": len(boxes),
+                    "max_score": float(logits.max()),
+                    "mask_coverage": coverage,
+                    "status": "filtered_too_small"
+                })
+                failed += 1
+                # Save empty mask
+                empty_mask = np.zeros((h, w), dtype=np.uint8)
+                cv2.imwrite(str(masks_dir / f"mask_{img_name}.png"), empty_mask)
+                np.save(masks_dir / f"mask_{img_name}.npy", empty_mask.astype(np.float32))
+                continue
             
             # Save mask
             mask_uint8 = (mask_binary * 255).astype(np.uint8)

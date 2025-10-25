@@ -53,8 +53,18 @@ pip install git+https://github.com/facebookresearch/segment-anything-2.git
 echo "✓ GroundingDINO and SAM2 installed"
 echo ""
 
+# Clone GroundingDINO repo for config files
+echo "5.6. Cloning GroundingDINO repository (for config files)..."
+if [ ! -d "GroundingDINO" ]; then
+    git clone https://github.com/IDEA-Research/GroundingDINO.git
+    echo "✓ GroundingDINO repository cloned"
+else
+    echo "✓ GroundingDINO repository already exists"
+fi
+echo ""
+
 # Download model weights
-echo "5.6. Downloading model weights..."
+echo "5.7. Downloading model weights..."
 chmod +x download_models.sh
 ./download_models.sh
 echo "✓ Model weights downloaded"
