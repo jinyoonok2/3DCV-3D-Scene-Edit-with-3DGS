@@ -1,11 +1,62 @@
-# Instruct GS Reconstruction — Module-Per-File Build (gsplat)
+# 3D Scene Editing with 3D Gaussian Splatting
 
-This README describes a **module-first** plan to implement text-guided 3D editing on **Mip-NeRF 360 / garden** using **gsplat + InstructPix2Pix + GroundingDINO + SAM/SAM2**.  
-Each module is a **single Python file** with a clear job, **inputs/outputs**, **where to save artifacts**, and **how to verify** it works before moving on.  
-The concrete task: **repaint the plant pot on the table into an empty black cup**.
+Text-guided 3D scene editing using **gsplat + InstructPix2Pix + GroundingDINO + SAM2**.  
+Each module is a **single Python file** with clear inputs/outputs and verification steps.
+
+**Example task**: Edit the brown plant in the Mip-NeRF 360 garden scene.
+
+---
+
+## Quick Start
+
+### Local Setup (WSL/Linux)
+```bash
+# Clone and setup
+git clone https://github.com/jinyoonok2/3DCV-3D-Scene-Edit-with-3DGS
+cd 3DCV-3D-Scene-Edit-with-3DGS
+chmod +x setup.sh
+./setup.sh
+
+# Activate environment
+source activate.sh
+
+# Run modules
+python 00_check_dataset.py --data_root datasets/360_v2/garden --factor 4
+python 01_train_gs_initial.py --data_root datasets/360_v2/garden --iters 30000
+# ... continue with other modules
+```
+
+### Vast.ai Setup (Cloud GPU)
+```bash
+# Clone and setup (auto-downloads dataset and models)
+git clone https://github.com/jinyoonok2/3DCV-3D-Scene-Edit-with-3DGS
+cd 3DCV-3D-Scene-Edit-with-3DGS
+chmod +x setup_vastai.sh
+./setup_vastai.sh
+
+# If tyro is missing, install manually
+pip install tyro
+
+# Activate and run
+source activate.sh
+# Upload your checkpoint and masks, then run Module 04
+```
+
+**Note**: RTX 4090 recommended for Vast.ai. RTX 5090 not yet supported by PyTorch stable (use RTX 4090, 3090, or A100).
+
+---
+
+## Setup Scripts
+
+- **`setup.sh`**: Universal setup for local/WSL/cloud (auto-detects environment)
+- **`setup_vastai.sh`**: Optimized for Vast.ai with CUDA 12.6, automatic dataset download
+- **`activate.sh`**: Activate virtual environment
+- **`zip_outputs.sh`**: Package outputs folder for download
+- **`unzip_outputs.sh`**: Extract outputs.zip
+- **`download_models.sh`**: Download GroundingDINO and SAM2 weights
 
 > No code here—only responsibilities, I/O, and verification steps.  
-> You can run each file as a standalone script with simple CLI args you define later.
+> You can run each file as a standalone script with simple CLI args.
 
 ---
 
@@ -77,52 +128,133 @@ The concrete task: **repaint the plant pot on the table into an empty black cup*
 
 ---
 
-## 03_ground_text_to_masks.py — Text → Boxes → Masks (GroundingDINO + SAM/SAM2)
+## 03_ground_text_to_masks.py — Text → Boxes → Masks (GroundingDINO + SAM2)
 
-**Goal**: From **text**, produce **2D masks** isolating the **plant pot** on each rendered view.
+**Goal**: From **text**, produce **2D masks** isolating objects on each rendered view using two-stage selection.
 
 **Inputs**
-- `--images_root outputs/garden_pot_to_black_cup/round_001/pre_edit/`
-- `--text "plant pot . potted plant . planter . flowerpot"`
-- Thresholds (e.g., `--dino_thresh 0.30`)
-- SAM/SAM2 model selection and weights path
+- `--images_root outputs/garden/round_001/pre_edit/train/`
+- `--text "brown plant"` (text prompt for GroundingDINO)
+- `--dino_thresh 0.3` (detection threshold)
+- `--sam_thresh 0.3` (SAM2 confidence threshold)
+- `--dino_selection confidence` (box selection: confidence/largest/None)
+- `--sam_selection confidence` (mask selection: confidence/None)
+- `--reference_box "[450,100,800,530]"` (optional spatial filter)
+- `--reference_overlap_thresh 0.8` (overlap threshold for spatial filter)
 
-**Saves (in `outputs/garden_pot_to_black_cup/round_001/masks/`)**
-- `boxes/box_view_000.png` (visualization with boxes)
-- `sam_masks/mask_view_000.png` (binary PNG, 0/255)
-- `sam_masks/mask_view_000.npy` (float mask in [0,1])
-- `overlays/overlay_view_000.png` (mask overlay on pre_edit image)
-- `coverage.csv` (per-view mask area %, detection scores)
-- `manifest.json`: text prompt, thresholds, model versions, seed
+**Two-Stage Selection System**:
+1. **DINO Stage**: Select boxes based on detection confidence or size
+   - `confidence`: Highest DINO score (default)
+   - `largest`: Biggest bounding box
+   - `None`: Keep all detections
+2. **SAM2 Stage**: Select masks from SAM2 output
+   - `confidence`: Highest SAM2 score (default)
+   - `None`: Save all masks (creates `_0.png`, `_1.png`, etc.)
+
+**Spatial Filtering** (optional):
+- `--reference_box`: Define region of interest [x1,y1,x2,y2]
+- `--reference_overlap_thresh`: Fraction of detection box that must overlap (0.8 = 80%)
+- Boxes not meeting threshold are rejected before SAM2
+
+**Saves (in `outputs/garden/round_001/masks_brown_plant/`)**
+- `boxes/` (annotated detections: blue=reference, green=selected, red=rejected)
+- `sam_masks/` (binary masks: PNG + NPY, multiple files if sam_selection=None)
+- `overlays/` (mask overlays showing all candidates with selection highlighting)
+- `coverage.csv` (includes: num_saved_masks, mask_area, dino_score, sam_score)
+- `manifest.json` (records dino_selection, sam_selection, sam_thresh, thresholds)
 
 **Verify**
-- Overlays show the **pot region** highlighted (most of the time)
-- Coverage is reasonable (e.g., 0.5%–5% of the image, not 0% or 50%+)
-- Failures are logged (views without detections); this is acceptable
+- Box visualizations show correct selection (green) vs rejection (red)
+- Overlays show the target region highlighted
+- Coverage CSV shows reasonable mask counts and sizes
+- Manifest records all parameters for reproducibility
+
+**Example Commands**:
+```bash
+# Select highest confidence box and mask
+python 03_ground_text_to_masks.py \
+    --images_root outputs/garden/round_001/pre_edit/train \
+    --text "brown plant" \
+    --dino_thresh 0.3 --sam_thresh 0.3 \
+    --dino_selection confidence --sam_selection confidence \
+    --output_dir outputs/garden/round_001/masks_brown_plant
+
+# Save all masks from largest box
+python 03_ground_text_to_masks.py \
+    --images_root outputs/garden/round_001/pre_edit/train \
+    --text "wooden pot" \
+    --dino_selection largest --sam_selection None \
+    --reference_box "[500,150,800,500]" --reference_overlap_thresh 0.9 \
+    --output_dir outputs/garden/round_001/masks_pot
+```
 
 ---
 
 ## 04_lift_masks_to_roi3d.py — 2D Masks → 3D ROI (Per-Gaussian Weights)
 
-**Goal**: Convert per-view 2D masks into a **per-Gaussian ROI weight** `roi ∈ [0,1]` that projects back to the masks.
+**Goal**: Convert per-view 2D masks into **per-Gaussian ROI weights** `roi ∈ [0,1]` by projecting masks to 3D and aggregating visibility.
+
+**Algorithm**:
+1. Load 3D Gaussians from checkpoint (handles nested 'splats' key format)
+2. For each training view with a mask:
+   - Render Gaussians to get per-pixel Gaussian IDs
+   - For each Gaussian visible in view:
+     - Check if it projects inside the mask
+     - Track: `num_masked_views` and `num_visible_views`
+3. Compute per-Gaussian weight: `weight = num_masked_views / num_visible_views`
+4. Threshold at `roi_thresh` to get binary ROI
 
 **Inputs**
-- `--ckpt outputs/garden_pot_to_black_cup/01_gs_base/ckpt_initial.pt`
-- `--masks_root outputs/garden_pot_to_black_cup/round_001/masks/sam_masks/`
-- `--poses_from outputs/garden_pot_to_black_cup/round_001/pre_edit/` (to align views)
-- `--iters 600`, `--roi_thresh 0.5`, `--seed 42`
+- `--ckpt outputs/garden/01_gs_base/ckpt_initial.pt` (nested format supported)
+- `--masks_root outputs/garden/round_001/masks_brown_plant/sam_masks/`
+- `--data_root datasets/360_v2/garden` (for camera poses and images)
+- `--roi_thresh 0.5` (threshold for binary ROI)
+- `--sh_degree 3` (must match training)
 
-**Saves (in `outputs/garden_pot_to_black_cup/round_001/roi/`)**
-- `roi.pt` (tensor of size N_gaussians with values in [0,1])
-- `roi_binary.pt` (thresholded indices or binary tensor)
-- `proj_masks/roi_proj_view_000.png` (projected ROI vs. SAM mask comparison)
-- `metrics.json`: mean IoU with SAM masks on firing views, sparsity %, number of ROI Gaussians
-- `manifest.json`: thresholds, iters, seed
+**Checkpoint Format**: Automatically handles both formats:
+- Flat: `ckpt['means']`, `ckpt['scales']`, etc.
+- Nested: `ckpt['splats']['means']`, `ckpt['splats']['scales']`, etc.
+
+**Saves (in `outputs/garden/round_001/`)**
+- `roi.pt` (per-Gaussian weights in [0,1], shape: [N_gaussians])
+- Statistics printed: mean weight, std, min, max, num above threshold
+
+**Performance**:
+- RTX 2060: ~5-15 minutes for 161 views × 245K Gaussians
+- RTX 4090: ~2-5 minutes
+- RTX 3090: ~3-7 minutes
 
 **Verify**
-- Mean IoU with SAM masks > 0.5 (tune thresholds if needed)
-- `roi_binary.pt` is **not empty** and is spatially localized to the pot region
-- Projected ROI looks consistent across multiple viewpoints
+- ROI statistics show reasonable distribution (not all 0 or all 1)
+- Number of Gaussians above threshold is reasonable (not empty, not everything)
+- Check console output for per-view processing progress
+
+**Example Command**:
+```bash
+# Local (may be slow on RTX 2060)
+python 04_lift_masks_to_roi3d.py \
+    --ckpt outputs/garden/01_gs_base/ckpt_initial.pt \
+    --masks_root outputs/garden/round_001/masks_brown_plant/sam_masks \
+    --data_root datasets/360_v2/garden \
+    --roi_thresh 0.5 \
+    --sh_degree 3 \
+    --output_dir outputs/garden/round_001
+
+# Vast.ai (recommended for speed)
+# 1. Upload checkpoint and masks
+# 2. Run same command on faster GPU
+# 3. Download roi.pt back to local machine
+```
+
+**Workflow for Vast.ai**:
+```bash
+# On Vast.ai: Package outputs
+./zip_outputs.sh
+
+# On local machine: Download and extract
+scp root@<vastai-ip>:/workspace/3DCV-3D-Scene-Edit-with-3DGS/outputs.zip .
+./unzip_outputs.sh
+```
 
 ---
 
