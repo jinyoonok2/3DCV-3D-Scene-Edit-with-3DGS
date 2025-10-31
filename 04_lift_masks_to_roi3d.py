@@ -120,6 +120,11 @@ def parse_args():
         default=3,
         help="Spherical harmonics degree (must match checkpoint)",
     )
+    parser.add_argument(
+        "--skip_visualization",
+        action="store_true",
+        help="Skip ROI projection visualization to save memory (recommended for large scenes)",
+    )
     return parser.parse_args()
 
 
@@ -508,34 +513,38 @@ def main():
     print(f"✓ Saved binary ROI to {output_dir / 'roi_binary.pt'}")
     print()
     
-    # Project ROI back to 2D for validation
-    projected_masks = project_roi_to_masks(splats, roi_weights, dataset, args.sh_degree, device)
-    print()
-    
-    # Compute IoU with SAM masks
-    ious = []
-    for img_name in image_names[:10]:  # Visualize first 10
-        if img_name not in masks or img_name not in projected_masks:
-            continue
+    # Project ROI back to 2D for validation (optional, memory-intensive)
+    if args.skip_visualization:
+        print("⏭️  Skipping ROI projection visualization (--skip_visualization enabled)")
+        mean_iou = 0.0
+    else:
+        projected_masks = project_roi_to_masks(splats, roi_weights, dataset, args.sh_degree, device)
+        print()
         
-        sam_mask = masks[img_name]
-        proj_mask = projected_masks[img_name]
+        # Compute IoU with SAM masks
+        ious = []
+        for img_name in image_names[:10]:  # Visualize first 10
+            if img_name not in masks or img_name not in projected_masks:
+                continue
+            
+            sam_mask = masks[img_name]
+            proj_mask = projected_masks[img_name]
+            
+            # Threshold both for binary comparison
+            sam_binary = sam_mask > 0.5
+            proj_binary = proj_mask > 0.5
+            
+            iou = compute_iou(proj_binary, sam_binary)
+            ious.append(iou)
+            
+            # Save visualization
+            vis_path = proj_masks_dir / f"roi_proj_{img_name}.png"
+            visualize_roi_projection(proj_mask, sam_mask, vis_path)
         
-        # Threshold both for binary comparison
-        sam_binary = sam_mask > 0.5
-        proj_binary = proj_mask > 0.5
-        
-        iou = compute_iou(proj_binary, sam_binary)
-        ious.append(iou)
-        
-        # Save visualization
-        vis_path = proj_masks_dir / f"roi_proj_{img_name}.png"
-        visualize_roi_projection(proj_mask, sam_mask, vis_path)
-    
-    mean_iou = np.mean(ious) if ious else 0.0
-    print(f"Mean IoU (projected ROI vs SAM masks): {mean_iou:.3f}")
-    print(f"✓ Saved {len(ious)} ROI projection visualizations to {proj_masks_dir}")
-    print()
+        mean_iou = np.mean(ious) if ious else 0.0
+        print(f"Mean IoU (projected ROI vs SAM masks): {mean_iou:.3f}")
+        print(f"✓ Saved {len(ious)} ROI projection visualizations to {proj_masks_dir}")
+        print()
     
     # Save metrics
     metrics = {
