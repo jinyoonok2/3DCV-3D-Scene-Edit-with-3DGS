@@ -133,8 +133,18 @@ else
 fi
 echo ""
 
+# Install gsplat examples requirements (for dataset download tools)
+echo "10. Installing gsplat examples requirements..."
+if [ -f "gsplat-src/examples/requirements.txt" ]; then
+    echo "  Note: Using --no-build-isolation for packages that need torch during build"
+    echo "  This may take a few minutes..."
+    pip install -r gsplat-src/examples/requirements.txt --no-build-isolation 2>&1 | grep -v "Requirement already satisfied" || true
+    echo "✓ gsplat examples requirements installed"
+fi
+echo ""
+
 # Install GroundingDINO
-echo "10. Installing GroundingDINO..."
+echo "11. Installing GroundingDINO..."
 if python -c "import groundingdino" 2>/dev/null; then
     echo "✓ GroundingDINO already installed"
 else
@@ -144,7 +154,7 @@ fi
 echo ""
 
 # Install SAM2 from GitHub
-echo "11. Installing SAM2..."
+echo "12. Installing SAM2..."
 if python -c "import sam2" 2>/dev/null; then
     echo "✓ SAM2 already installed"
 else
@@ -154,7 +164,7 @@ fi
 echo ""
 
 # Download model weights
-echo "12. Downloading model weights..."
+echo "13. Downloading model weights..."
 if [ ! -f "models/groundingdino_swint_ogc.pth" ] || [ ! -f "models/sam2_hiera_large.pt" ]; then
     echo "  Running download_models.sh..."
     chmod +x download_models.sh
@@ -167,7 +177,7 @@ fi
 echo ""
 
 # Final verification
-echo "13. Final verification..."
+echo "14. Final verification..."
 echo "  Testing imports..."
 python -c "
 import torch
@@ -185,7 +195,7 @@ print('  SAM2: OK')
 echo ""
 
 # Download dataset
-echo "14. Checking for dataset..."
+echo "15. Checking for dataset..."
 if [ ! -d "datasets/360_v2/garden" ]; then
     echo "  Downloading Mip-NeRF 360 garden dataset (~2.5GB)..."
     cd gsplat-src/examples
@@ -239,7 +249,4 @@ echo "Download results back to local machine:"
 echo "  scp root@<vastai-ip>:/workspace/3DCV-3D-Scene-Edit-with-3DGS/outputs/garden/round_001/roi.pt outputs/garden/round_001/"
 echo ""
 echo "=========================================="
-echo ""
-echo "Note: This script skips gsplat examples requirements to avoid"
-echo "      build issues. Core functionality is fully available."
 echo ""
