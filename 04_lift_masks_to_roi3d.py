@@ -290,6 +290,11 @@ def compute_roi_weights_voting(splats, dataset, masks, sh_degree=3, device="cuda
         
         # Get 2D mask
         mask_2d = masks[img_name]  # [H, W]
+        
+        # CRITICAL: Resize mask to match image resolution if needed
+        if mask_2d.shape[0] != height or mask_2d.shape[1] != width:
+            mask_2d = cv2.resize(mask_2d, (width, height), interpolation=cv2.INTER_LINEAR)
+        
         mask_tensor = torch.from_numpy(mask_2d).float().to(device)
         
         # Rasterize to get per-pixel contribution
