@@ -120,17 +120,6 @@ def parse_args():
         default=3,
         help="Spherical harmonics degree (must match checkpoint)",
     )
-    parser.add_argument(
-        "--skip_visualization",
-        action="store_true",
-        help="Skip ROI projection visualization to save memory (recommended for large scenes)",
-    )
-    parser.add_argument(
-        "--vis_roi_threshold",
-        type=float,
-        default=0.01,
-        help="Only render Gaussians with roi > threshold for visualization (saves memory)",
-    )
     return parser.parse_args()
 
 
@@ -381,126 +370,6 @@ def apply_threshold(roi_weights, threshold, min_views_count=None):
     return roi_binary
 
 
-def compute_iou(mask1, mask2):
-    """Compute IoU between two binary masks."""
-    intersection = (mask1 & mask2).sum()
-    union = (mask1 | mask2).sum()
-    return (intersection / (union + 1e-6)).item()
-
-
-def project_roi_to_masks(splats, roi_weights, dataset, sh_degree=3, device="cuda", roi_threshold=0.01):
-    """
-    Project ROI weights back to 2D for visualization and IoU computation.
-    Optimized for large scenes: only renders Gaussians with roi_weight > threshold.
-    """
-    projected_masks = {}
-    
-    # Clear GPU cache before visualization to free up memory
-    torch.cuda.empty_cache()
-    
-    # OPTIMIZATION: Only render Gaussians with significant ROI weight
-    roi_mask = roi_weights > roi_threshold
-    num_roi = roi_mask.sum().item()
-    num_total = roi_weights.shape[0]
-    
-    print(f"Projecting ROI back to 2D views...")
-    print(f"  Rendering {num_roi:,} / {num_total:,} Gaussians (roi > {roi_threshold}) to save memory")
-    
-    if num_roi == 0:
-        print("  WARNING: No Gaussians above threshold, skipping visualization")
-        return projected_masks
-    
-    # Extract only ROI Gaussians
-    roi_splats = {
-        "means": splats["means"][roi_mask],
-        "quats": splats["quats"][roi_mask],
-        "scales": splats["scales"][roi_mask],
-        "opacities": splats["opacities"][roi_mask],
-    }
-    roi_weights_subset = roi_weights[roi_mask]
-    
-    colors = splats["colors"]
-    num_sh_bases = (sh_degree + 1) ** 2
-    
-    for idx in tqdm(range(len(dataset)), desc="Projecting ROI"):
-        data = dataset[idx]
-        img_name = f"view_{idx:03d}"
-        
-        camtoworld = data["camtoworld"].unsqueeze(0).to(device)
-        K = data["K"].unsqueeze(0).to(device)
-        height, width = data["image"].shape[:2]
-        
-        # Project Gaussians to 2D with ROI as "color"
-        try:
-            with torch.no_grad():
-                # Use ROI weights as grayscale "color" (only for ROI subset)
-                roi_colors = roi_weights_subset.unsqueeze(-1).unsqueeze(-1).expand(num_roi, 1, 3)  # [N_roi, 1, 3]
-                
-                # Boost opacities for visualization (otherwise ROI Gaussians might be too transparent)
-                vis_opacities = torch.ones_like(roi_splats["opacities"]) * 0.9  # High opacity for visibility
-                
-                # Rasterize with ROI as color (only ROI Gaussians)
-                render_roi, _, _ = rasterization(
-                means=roi_splats["means"],
-                quats=roi_splats["quats"],
-                scales=roi_splats["scales"],
-                opacities=vis_opacities,  # Use high opacity for visualization
-                colors=roi_colors,  # Use ROI weights as color
-                viewmats=torch.linalg.inv(camtoworld),
-                Ks=K,
-                width=width,
-                height=height,
-                sh_degree=0,  # DC only since we're using constant colors
-                render_mode="RGB",
-                )
-                
-                # Extract projected ROI mask
-                proj_mask = render_roi[0, :, :, 0].cpu().numpy()  # [H, W]
-                projected_masks[img_name] = proj_mask
-                
-                # Clean up GPU memory after each view
-                del render_roi
-                torch.cuda.empty_cache()
-                
-        except RuntimeError as e:
-            if "out of memory" in str(e).lower():
-                print(f"\n⚠️  GPU OOM at view {idx}. Scene too large for visualization.")
-                print(f"   Processed {len(projected_masks)}/{len(dataset)} views before OOM.")
-                print(f"   Consider using --skip_visualization for very large scenes.")
-                break
-            else:
-                raise
-    
-    return projected_masks
-
-
-def visualize_roi_projection(proj_mask, sam_mask, output_path):
-    """Create side-by-side comparison of projected ROI vs SAM mask."""
-    import matplotlib.pyplot as plt
-    
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-    
-    # Projected ROI
-    axes[0].imshow(proj_mask, cmap='jet', vmin=0, vmax=1)
-    axes[0].set_title("Projected ROI (from 3D)")
-    axes[0].axis('off')
-    
-    # SAM mask
-    axes[1].imshow(sam_mask, cmap='gray', vmin=0, vmax=1)
-    axes[1].set_title("SAM Mask (2D)")
-    axes[1].axis('off')
-    
-    # Overlay
-    axes[2].imshow(sam_mask, cmap='gray', vmin=0, vmax=1, alpha=0.5)
-    axes[2].imshow(proj_mask, cmap='jet', vmin=0, vmax=1, alpha=0.5)
-    axes[2].set_title("Overlay")
-    axes[2].axis('off')
-    
-    plt.tight_layout()
-    plt.savefig(output_path, bbox_inches='tight', dpi=150)
-    plt.close()
-
-
 def main():
     args = parse_args()
     set_random_seed(args.seed)
@@ -578,50 +447,7 @@ def main():
     print(f"✓ Saved binary ROI to {output_dir / 'roi_binary.pt'}")
     print()
     
-    # FREE GPU MEMORY before visualization!
-    # We don't need the full 6.6M Gaussians anymore
-    print("Clearing GPU memory before visualization...")
-    del splats  # Free the large splat tensors
-    torch.cuda.empty_cache()
-    
-    # Reload only what we need for visualization (will be subset in project_roi_to_masks)
-    splats = load_checkpoint(args.ckpt, device=device)
-    
-    # Project ROI back to 2D for validation (optional, memory-intensive)
-    if args.skip_visualization:
-        print("⏭️  Skipping ROI projection visualization (--skip_visualization enabled)")
-        mean_iou = 0.0
-    else:
-        projected_masks = project_roi_to_masks(
-            splats, roi_weights, dataset, args.sh_degree, device, 
-            roi_threshold=args.vis_roi_threshold
-        )
-        print()
-        
-        # Compute IoU with SAM masks
-        ious = []
-        for img_name in image_names[:10]:  # Visualize first 10
-            if img_name not in masks or img_name not in projected_masks:
-                continue
-            
-            sam_mask = masks[img_name]
-            proj_mask = projected_masks[img_name]
-            
-            # Threshold both for binary comparison
-            sam_binary = sam_mask > 0.5
-            proj_binary = proj_mask > 0.5
-            
-            iou = compute_iou(proj_binary, sam_binary)
-            ious.append(iou)
-            
-            # Save visualization
-            vis_path = proj_masks_dir / f"roi_proj_{img_name}.png"
-            visualize_roi_projection(proj_mask, sam_mask, vis_path)
-        
-        mean_iou = np.mean(ious) if ious else 0.0
-        print(f"Mean IoU (projected ROI vs SAM masks): {mean_iou:.3f}")
-        print(f"✓ Saved {len(ious)} ROI projection visualizations to {proj_masks_dir}")
-        print()
+    mean_iou = 0.0  # Visualization moved to 04b_visualize_roi.py
     
     # Save metrics
     metrics = {
@@ -677,10 +503,11 @@ def main():
     print("=" * 80)
     print(f"✓ ROI weights: {output_dir / 'roi.pt'}")
     print(f"✓ Binary ROI: {output_dir / 'roi_binary.pt'}")
-    print(f"✓ Projections: {proj_masks_dir}")
     print()
-    print(f"Next step: Use ROI for gated optimization (Module 06)")
-    print(f"  Or create edited targets with InstructPix2Pix (Module 05)")
+    print(f"Next steps:")
+    print(f"  1. Visualize ROI: python 04b_visualize_roi.py --roi {output_dir / 'roi.pt'} --ckpt {args.ckpt} --data_root {args.data_root} --masks_root {args.masks_root}/sam_masks")
+    print(f"  2. Create edited targets: python 05_ip2p_edit_targets.py ...")
+    print(f"  3. ROI-gated optimization: python 06_optimize_with_roi.py ...")
     print("=" * 80)
 
 
