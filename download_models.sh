@@ -1,8 +1,16 @@
 #!/bin/bash
 # Script to download GroundingDINO and SAM2 model weights
+# Can be run independently or called by setup.sh
 
-echo "Downloading GroundingDINO and SAM2 model weights..."
-echo "=================================================="
+echo "=========================================="
+echo "Downloading Model Weights"
+echo "=========================================="
+echo ""
+echo "This will download:"
+echo "  - GroundingDINO SwinT-OGC (~662 MB)"
+echo "  - SAM2 Hiera Large (~857 MB)"
+echo "  Total: ~1.5 GB"
+echo ""
 
 # Create models directory
 mkdir -p models

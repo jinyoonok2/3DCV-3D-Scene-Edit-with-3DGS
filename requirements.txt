@@ -17,6 +17,13 @@ accelerate>=0.20.0
 # For perceptual loss
 lpips>=0.1.4
 
+# For text-to-mask generation (Module 03)
+groundingdino-py
+# SAM2 installed via git: pip install git+https://github.com/facebookresearch/segment-anything-2.git
+
+# For visualization
+matplotlib>=3.5.0
+
 # For gsplat (already in gsplat-src requirements)
 # These are needed if you want to install separately
 # gsplat

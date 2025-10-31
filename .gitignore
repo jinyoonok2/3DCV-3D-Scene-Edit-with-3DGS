@@ -12,6 +12,7 @@ build/
 .venv/
 venv/
 env/
+ENV/
 
 # Data and external dependencies
 datasets/
