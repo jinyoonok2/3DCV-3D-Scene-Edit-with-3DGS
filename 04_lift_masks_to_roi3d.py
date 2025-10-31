@@ -125,6 +125,12 @@ def parse_args():
         action="store_true",
         help="Skip ROI projection visualization to save memory (recommended for large scenes)",
     )
+    parser.add_argument(
+        "--vis_roi_threshold",
+        type=float,
+        default=0.01,
+        help="Only render Gaussians with roi > threshold for visualization (saves memory)",
+    )
     return parser.parse_args()
 
 
@@ -362,17 +368,36 @@ def compute_iou(mask1, mask2):
     return (intersection / (union + 1e-6)).item()
 
 
-def project_roi_to_masks(splats, roi_weights, dataset, sh_degree=3, device="cuda"):
-    """Project ROI weights back to 2D for visualization and IoU computation."""
+def project_roi_to_masks(splats, roi_weights, dataset, sh_degree=3, device="cuda", roi_threshold=0.01):
+    """
+    Project ROI weights back to 2D for visualization and IoU computation.
+    Optimized for large scenes: only renders Gaussians with roi_weight > threshold.
+    """
     projected_masks = {}
     
-    print("Projecting ROI back to 2D views...")
+    # OPTIMIZATION: Only render Gaussians with significant ROI weight
+    roi_mask = roi_weights > roi_threshold
+    num_roi = roi_mask.sum().item()
+    num_total = roi_weights.shape[0]
+    
+    print(f"Projecting ROI back to 2D views...")
+    print(f"  Rendering {num_roi:,} / {num_total:,} Gaussians (roi > {roi_threshold}) to save memory")
+    
+    if num_roi == 0:
+        print("  WARNING: No Gaussians above threshold, skipping visualization")
+        return projected_masks
+    
+    # Extract only ROI Gaussians
+    roi_splats = {
+        "means": splats["means"][roi_mask],
+        "quats": splats["quats"][roi_mask],
+        "scales": splats["scales"][roi_mask],
+        "opacities": splats["opacities"][roi_mask],
+    }
+    roi_weights_subset = roi_weights[roi_mask]
     
     colors = splats["colors"]
     num_sh_bases = (sh_degree + 1) ** 2
-    colors_truncated = colors[:, :num_sh_bases, :]
-    
-    num_gaussians = splats["means"].shape[0]
     
     for idx in tqdm(range(len(dataset)), desc="Projecting ROI"):
         data = dataset[idx]
@@ -384,15 +409,15 @@ def project_roi_to_masks(splats, roi_weights, dataset, sh_degree=3, device="cuda
         
         # Project Gaussians to 2D with ROI as "color"
         with torch.no_grad():
-            # Use ROI weights as grayscale "color"
-            roi_colors = roi_weights.unsqueeze(-1).unsqueeze(-1).expand(num_gaussians, 1, 3)  # [N, 1, 3]
+            # Use ROI weights as grayscale "color" (only for ROI subset)
+            roi_colors = roi_weights_subset.unsqueeze(-1).unsqueeze(-1).expand(num_roi, 1, 3)  # [N_roi, 1, 3]
             
-            # Rasterize with ROI as color
+            # Rasterize with ROI as color (only ROI Gaussians)
             render_roi, _, _ = rasterization(
-                means=splats["means"],
-                quats=splats["quats"],
-                scales=splats["scales"],
-                opacities=splats["opacities"],
+                means=roi_splats["means"],
+                quats=roi_splats["quats"],
+                scales=roi_splats["scales"],
+                opacities=roi_splats["opacities"],
                 colors=roi_colors,  # Use ROI weights as color
                 viewmats=torch.linalg.inv(camtoworld),
                 Ks=K,
@@ -518,7 +543,10 @@ def main():
         print("⏭️  Skipping ROI projection visualization (--skip_visualization enabled)")
         mean_iou = 0.0
     else:
-        projected_masks = project_roi_to_masks(splats, roi_weights, dataset, args.sh_degree, device)
+        projected_masks = project_roi_to_masks(
+            splats, roi_weights, dataset, args.sh_degree, device, 
+            roi_threshold=args.vis_roi_threshold
+        )
         print()
         
         # Compute IoU with SAM masks
