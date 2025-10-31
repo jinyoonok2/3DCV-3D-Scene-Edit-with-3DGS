@@ -380,8 +380,24 @@ def project_roi_to_masks(splats, roi_weights, dataset, sh_degree=3, device="cuda
     num_roi = roi_mask.sum().item()
     num_total = roi_weights.shape[0]
     
+    # Safety check: if still too many Gaussians, warn and potentially skip
+    max_safe_gaussians = 500_000  # Conservative limit for visualization
+    if num_roi > max_safe_gaussians:
+        print(f"Projecting ROI back to 2D views...")
+        print(f"  WARNING: {num_roi:,} Gaussians with roi > {roi_threshold} is too many")
+        print(f"  Automatically increasing threshold to reduce memory usage...")
+        
+        # Find a threshold that gives us ~500K Gaussians
+        sorted_roi = torch.sort(roi_weights, descending=True)[0]
+        if len(sorted_roi) > max_safe_gaussians:
+            new_threshold = sorted_roi[max_safe_gaussians].item()
+            roi_threshold = max(new_threshold, roi_threshold)
+            roi_mask = roi_weights > roi_threshold
+            num_roi = roi_mask.sum().item()
+            print(f"  New threshold: {roi_threshold:.3f} → {num_roi:,} Gaussians")
+    
     print(f"Projecting ROI back to 2D views...")
-    print(f"  Rendering {num_roi:,} / {num_total:,} Gaussians (roi > {roi_threshold}) to save memory")
+    print(f"  Rendering {num_roi:,} / {num_total:,} Gaussians (roi > {roi_threshold:.3f}) to save memory")
     
     if num_roi == 0:
         print("  WARNING: No Gaussians above threshold, skipping visualization")
@@ -430,6 +446,10 @@ def project_roi_to_masks(splats, roi_weights, dataset, sh_degree=3, device="cuda
             # Extract projected ROI mask
             proj_mask = render_roi[0, :, :, 0].cpu().numpy()  # [H, W]
             projected_masks[img_name] = proj_mask
+            
+            # Clean up GPU memory after each view
+            del render_roi
+            torch.cuda.empty_cache()
     
     return projected_masks
 
