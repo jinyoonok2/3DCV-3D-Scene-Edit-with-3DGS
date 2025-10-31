@@ -307,17 +307,24 @@ def compute_roi_weights_voting(splats, dataset, masks, sh_degree=3, device="cuda
             # Valid pixels (within image bounds)
             valid = (px >= 0) & (px < width) & (py >= 0) & (py < height) & (means_cam[:, 2] > 0)
             
-            # For valid Gaussians, check mask value at their projected location
-            for g_idx in range(num_gaussians):
-                if not valid[g_idx]:
-                    continue
+            # VECTORIZED: For valid Gaussians, check mask value at their projected location
+            # Get indices of valid Gaussians
+            valid_indices = torch.where(valid)[0]
+            
+            if len(valid_indices) > 0:
+                # Get pixel coordinates for valid Gaussians
+                valid_px = px[valid_indices].clamp(0, width - 1)
+                valid_py = py[valid_indices].clamp(0, height - 1)
                 
-                x, y = px[g_idx].item(), py[g_idx].item()
-                mask_val = mask_tensor[y, x].item()
+                # Sample mask values at projected locations (vectorized)
+                mask_values = mask_tensor[valid_py, valid_px]  # [num_valid]
                 
-                # Accumulate vote
-                roi_votes[g_idx] += mask_val * splats["opacities"][g_idx].item()
-                roi_counts[g_idx] += 1
+                # Get opacities for valid Gaussians
+                valid_opacities = splats["opacities"][valid_indices].squeeze(-1)  # [num_valid]
+                
+                # Accumulate votes (vectorized)
+                roi_votes[valid_indices] += mask_values * valid_opacities
+                roi_counts[valid_indices] += 1
     
     # Normalize: average mask value across views where Gaussian is visible
     roi_weights = roi_votes / (roi_counts + 1e-6)
