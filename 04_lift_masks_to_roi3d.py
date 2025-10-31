@@ -416,12 +416,15 @@ def project_roi_to_masks(splats, roi_weights, dataset, sh_degree=3, device="cuda
                 # Use ROI weights as grayscale "color" (only for ROI subset)
                 roi_colors = roi_weights_subset.unsqueeze(-1).unsqueeze(-1).expand(num_roi, 1, 3)  # [N_roi, 1, 3]
                 
+                # Boost opacities for visualization (otherwise ROI Gaussians might be too transparent)
+                vis_opacities = torch.ones_like(roi_splats["opacities"]) * 0.9  # High opacity for visibility
+                
                 # Rasterize with ROI as color (only ROI Gaussians)
                 render_roi, _, _ = rasterization(
                 means=roi_splats["means"],
                 quats=roi_splats["quats"],
                 scales=roi_splats["scales"],
-                opacities=roi_splats["opacities"],
+                opacities=vis_opacities,  # Use high opacity for visualization
                 colors=roi_colors,  # Use ROI weights as color
                 viewmats=torch.linalg.inv(camtoworld),
                 Ks=K,
