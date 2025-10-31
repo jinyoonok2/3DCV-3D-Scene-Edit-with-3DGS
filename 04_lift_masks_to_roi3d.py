@@ -291,6 +291,15 @@ def compute_roi_weights_voting(splats, dataset, masks, sh_degree=3, device="cuda
         # Get 2D mask
         mask_2d = masks[img_name]  # [H, W]
         
+        # Debug first view
+        if idx == 0:
+            print(f"  DEBUG view {idx}:")
+            print(f"    Image size: {height}x{width}")
+            print(f"    Mask size: {mask_2d.shape}")
+            print(f"    Mask range: [{mask_2d.min():.3f}, {mask_2d.max():.3f}]")
+            print(f"    Mask mean: {mask_2d.mean():.3f}")
+            print(f"    Pixels > 0: {(mask_2d > 0).sum()} / {mask_2d.size}")
+        
         # CRITICAL: Resize mask to match image resolution if needed
         if mask_2d.shape[0] != height or mask_2d.shape[1] != width:
             mask_2d = cv2.resize(mask_2d, (width, height), interpolation=cv2.INTER_LINEAR)
@@ -341,6 +350,12 @@ def compute_roi_weights_voting(splats, dataset, masks, sh_degree=3, device="cuda
                 # Accumulate votes (vectorized)
                 roi_votes[valid_indices] += mask_values * valid_opacities
                 roi_counts[valid_indices] += 1
+                
+                # Debug first view
+                if idx == 0:
+                    print(f"    Valid Gaussians: {len(valid_indices):,}")
+                    print(f"    Gaussians in mask (value > 0): {(mask_values > 0).sum().item():,}")
+                    print(f"    Mean mask value at Gaussian centers: {mask_values.mean().item():.3f}")
     
     # Normalize: average mask value across views where Gaussian is visible
     roi_weights = roi_votes / (roi_counts + 1e-6)
