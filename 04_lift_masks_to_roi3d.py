@@ -375,29 +375,16 @@ def project_roi_to_masks(splats, roi_weights, dataset, sh_degree=3, device="cuda
     """
     projected_masks = {}
     
+    # Clear GPU cache before visualization to free up memory
+    torch.cuda.empty_cache()
+    
     # OPTIMIZATION: Only render Gaussians with significant ROI weight
     roi_mask = roi_weights > roi_threshold
     num_roi = roi_mask.sum().item()
     num_total = roi_weights.shape[0]
     
-    # Safety check: if still too many Gaussians, warn and potentially skip
-    max_safe_gaussians = 500_000  # Conservative limit for visualization
-    if num_roi > max_safe_gaussians:
-        print(f"Projecting ROI back to 2D views...")
-        print(f"  WARNING: {num_roi:,} Gaussians with roi > {roi_threshold} is too many")
-        print(f"  Automatically increasing threshold to reduce memory usage...")
-        
-        # Find a threshold that gives us ~500K Gaussians
-        sorted_roi = torch.sort(roi_weights, descending=True)[0]
-        if len(sorted_roi) > max_safe_gaussians:
-            new_threshold = sorted_roi[max_safe_gaussians].item()
-            roi_threshold = max(new_threshold, roi_threshold)
-            roi_mask = roi_weights > roi_threshold
-            num_roi = roi_mask.sum().item()
-            print(f"  New threshold: {roi_threshold:.3f} → {num_roi:,} Gaussians")
-    
     print(f"Projecting ROI back to 2D views...")
-    print(f"  Rendering {num_roi:,} / {num_total:,} Gaussians (roi > {roi_threshold:.3f}) to save memory")
+    print(f"  Rendering {num_roi:,} / {num_total:,} Gaussians (roi > {roi_threshold}) to save memory")
     
     if num_roi == 0:
         print("  WARNING: No Gaussians above threshold, skipping visualization")
@@ -424,12 +411,13 @@ def project_roi_to_masks(splats, roi_weights, dataset, sh_degree=3, device="cuda
         height, width = data["image"].shape[:2]
         
         # Project Gaussians to 2D with ROI as "color"
-        with torch.no_grad():
-            # Use ROI weights as grayscale "color" (only for ROI subset)
-            roi_colors = roi_weights_subset.unsqueeze(-1).unsqueeze(-1).expand(num_roi, 1, 3)  # [N_roi, 1, 3]
-            
-            # Rasterize with ROI as color (only ROI Gaussians)
-            render_roi, _, _ = rasterization(
+        try:
+            with torch.no_grad():
+                # Use ROI weights as grayscale "color" (only for ROI subset)
+                roi_colors = roi_weights_subset.unsqueeze(-1).unsqueeze(-1).expand(num_roi, 1, 3)  # [N_roi, 1, 3]
+                
+                # Rasterize with ROI as color (only ROI Gaussians)
+                render_roi, _, _ = rasterization(
                 means=roi_splats["means"],
                 quats=roi_splats["quats"],
                 scales=roi_splats["scales"],
@@ -441,15 +429,24 @@ def project_roi_to_masks(splats, roi_weights, dataset, sh_degree=3, device="cuda
                 height=height,
                 sh_degree=0,  # DC only since we're using constant colors
                 render_mode="RGB",
-            )
-            
-            # Extract projected ROI mask
-            proj_mask = render_roi[0, :, :, 0].cpu().numpy()  # [H, W]
-            projected_masks[img_name] = proj_mask
-            
-            # Clean up GPU memory after each view
-            del render_roi
-            torch.cuda.empty_cache()
+                )
+                
+                # Extract projected ROI mask
+                proj_mask = render_roi[0, :, :, 0].cpu().numpy()  # [H, W]
+                projected_masks[img_name] = proj_mask
+                
+                # Clean up GPU memory after each view
+                del render_roi
+                torch.cuda.empty_cache()
+                
+        except RuntimeError as e:
+            if "out of memory" in str(e).lower():
+                print(f"\n⚠️  GPU OOM at view {idx}. Scene too large for visualization.")
+                print(f"   Processed {len(projected_masks)}/{len(dataset)} views before OOM.")
+                print(f"   Consider using --skip_visualization for very large scenes.")
+                break
+            else:
+                raise
     
     return projected_masks
 
@@ -557,6 +554,15 @@ def main():
     print(f"✓ Saved ROI weights to {output_dir / 'roi.pt'}")
     print(f"✓ Saved binary ROI to {output_dir / 'roi_binary.pt'}")
     print()
+    
+    # FREE GPU MEMORY before visualization!
+    # We don't need the full 6.6M Gaussians anymore
+    print("Clearing GPU memory before visualization...")
+    del splats  # Free the large splat tensors
+    torch.cuda.empty_cache()
+    
+    # Reload only what we need for visualization (will be subset in project_roi_to_masks)
+    splats = load_checkpoint(args.ckpt, device=device)
     
     # Project ROI back to 2D for validation (optional, memory-intensive)
     if args.skip_visualization:
