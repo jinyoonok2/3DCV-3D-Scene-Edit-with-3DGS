@@ -47,9 +47,12 @@ if [ -d "outputs" ]; then
     echo ""
 fi
 
-# Unzip the archive
-echo "Extracting..."
-unzip -q -o "${ZIP_FILE}"
+# Create outputs folder if it doesn't exist
+mkdir -p outputs
+
+# Unzip the archive into outputs folder
+echo "Extracting to outputs/..."
+unzip -q -o "${ZIP_FILE}" -d outputs
 
 echo ""
 echo "========================================"
