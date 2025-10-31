@@ -17,6 +17,8 @@ ENV/
 # Data and external dependencies
 datasets/
 gsplat-src/
+GroundingDINO/
+sam2/
 
 # Model weights
 models/
