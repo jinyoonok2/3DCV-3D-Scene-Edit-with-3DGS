@@ -1,5 +1,5 @@
 #!/bin/bash
-# Script to unzip outputs archive downloaded from Vast.ai
+# Script to unzip outputs archive
 
 echo "========================================"
 echo "Unzipping outputs archive"
@@ -8,20 +8,18 @@ echo ""
 
 # Check if argument provided
 if [ $# -eq 0 ]; then
-    # No argument, look for most recent outputs_*.zip
-    ZIP_FILE=$(ls -t outputs_*.zip 2>/dev/null | head -n 1)
+    # No argument, default to outputs.zip
+    ZIP_FILE="outputs.zip"
     
-    if [ -z "$ZIP_FILE" ]; then
-        echo "ERROR: No outputs_*.zip file found!"
+    if [ ! -f "$ZIP_FILE" ]; then
+        echo "ERROR: outputs.zip file not found!"
         echo ""
         echo "Usage:"
-        echo "  $0                    - Unzip most recent outputs_*.zip"
+        echo "  $0                    - Unzip outputs.zip"
         echo "  $0 <zip_file>         - Unzip specific file"
         echo ""
         exit 1
     fi
-    
-    echo "Found most recent archive: ${ZIP_FILE}"
 else
     # Argument provided
     ZIP_FILE="$1"
