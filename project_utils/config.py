@@ -145,30 +145,22 @@ class ProjectConfig:
             target = target[key]
         target[keys[-1]] = value
     
-    def save_manifest(self, module_name: str, inputs: Dict, outputs: Dict, 
-                     metrics: Optional[Dict] = None):
+    def save_manifest(self, module_name: str, manifest_data: Dict):
         """
         Save manifest for a completed module
         
         Args:
             module_name: Name of the module (e.g., "03_masks")
-            inputs: Input files/parameters used
-            outputs: Output files generated
-            metrics: Optional metrics computed
+            manifest_data: Dictionary containing all manifest information
         """
-        manifest = {
-            'module': module_name,
-            'timestamp': datetime.now().isoformat(),
-            'project': self.config['project'],
-            'inputs': inputs,
-            'outputs': outputs,
-            'metrics': metrics or {}
-        }
+        # Add project info if not present
+        if 'project' not in manifest_data:
+            manifest_data['project'] = self.config['project']
         
         # Save to logs directory
         log_path = self.get_path('logs') / f'{module_name}_manifest.json'
         with open(log_path, 'w') as f:
-            json.dump(manifest, f, indent=2)
+            json.dump(manifest_data, f, indent=2)
             
         print(f"✓ Saved manifest: {log_path}")
         
