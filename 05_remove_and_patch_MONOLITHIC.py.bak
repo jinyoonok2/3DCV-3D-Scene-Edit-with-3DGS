@@ -1,0 +1,533 @@
+#!/usr/bin/env python3
+"""
+05_remove_and_patch.py - Remove Object and Fill Hole with SDXL Inpainting
+
+Goal: Remove object from 3DGS scene and fill the hole using 2D diffusion inpainting.
+
+Approach:
+  1. Load 3DGS checkpoint and ROI weights
+  2. Delete Gaussians where ROI > threshold
+  3. Render holed scene from all training views
+  4. For each view, use SDXL Inpainting to fill the hole
+  5. Optimize remaining Gaussians to match inpainted targets (ROI-gated loss)
+
+Inputs:
+  --ckpt: Path to initial 3DGS checkpoint (e.g., outputs/garden/01_gs_base/ckpt_initial.pt)
+  --roi: Path to ROI weights (e.g., outputs/garden/round_001/roi.pt)
+  --data_root: Dataset root for camera poses (e.g., datasets/360_v2/garden)
+  --output_dir: Output directory (default: inferred from ROI parent)
+  --roi_thresh: ROI threshold for deletion (default: 0.7, higher = more conservative)
+  --inpaint_strength: SDXL denoising strength (default: 0.99)
+  --prompt: Inpainting prompt (default: "natural outdoor scene")
+  --negative_prompt: Negative prompt (default: "blurry, distorted")
+  --iters: Optimization iterations (default: 1000)
+  --factor: Image downsample factor (default: 4)
+
+Outputs (saved in output_dir/05_patched/):
+  - ckpt_patched.pt: Optimized 3DGS checkpoint
+  - holed_renders/train/*.png: Renders before inpainting
+  - inpainted_targets/train/*.png: Inpainted target images
+  - final_renders/train/*.png: Final optimized renders
+  - loss_curves.png: Training loss visualization
+  - manifest.json: All parameters and metadata
+"""
+
+import argparse
+import json
+import sys
+from datetime import datetime
+from pathlib import Path
+
+import cv2
+import numpy as np
+import torch
+from PIL import Image
+from tqdm import tqdm
+from rich.console import Console
+from rich.progress import track
+
+console = Console()
+
+# Add gsplat examples to path
+sys.path.insert(0, str(Path(__file__).parent / "gsplat-src" / "examples"))
+
+try:
+    from datasets.colmap import Dataset, Parser
+    from utils import set_random_seed
+except ImportError:
+    console.print("[red]ERROR: Could not import from gsplat examples.[/red]")
+    console.print("Make sure gsplat-src/examples is available.")
+    sys.exit(1)
+
+try:
+    from gsplat import rasterization
+    from gsplat.strategy import DefaultStrategy
+except ImportError:
+    console.print("[red]ERROR: gsplat not installed. Run: pip install gsplat[/red]")
+    sys.exit(1)
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Remove object and inpaint hole")
+    parser.add_argument(
+        "--ckpt",
+        type=str,
+        required=True,
+        help="Path to initial 3DGS checkpoint",
+    )
+    parser.add_argument(
+        "--roi",
+        type=str,
+        required=True,
+        help="Path to ROI weights (.pt file)",
+    )
+    parser.add_argument(
+        "--data_root",
+        type=str,
+        required=True,
+        help="Dataset root for camera poses",
+    )
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        default=None,
+        help="Output directory (default: inferred from ROI parent)",
+    )
+    parser.add_argument(
+        "--roi_thresh",
+        type=float,
+        default=0.7,
+        help="ROI threshold for deletion (0-1)",
+    )
+    parser.add_argument(
+        "--inpaint_strength",
+        type=float,
+        default=0.99,
+        help="SDXL denoising strength (0-1)",
+    )
+    parser.add_argument(
+        "--prompt",
+        type=str,
+        default="natural outdoor scene, grass, plants",
+        help="Inpainting prompt",
+    )
+    parser.add_argument(
+        "--negative_prompt",
+        type=str,
+        default="blurry, distorted, artifacts, low quality",
+        help="Negative prompt",
+    )
+    parser.add_argument(
+        "--iters",
+        type=int,
+        default=1000,
+        help="Optimization iterations",
+    )
+    parser.add_argument(
+        "--lr_means",
+        type=float,
+        default=1.6e-4,
+        help="Learning rate for Gaussian positions",
+    )
+    parser.add_argument(
+        "--lr_scales",
+        type=float,
+        default=5e-3,
+        help="Learning rate for Gaussian scales",
+    )
+    parser.add_argument(
+        "--lr_quats",
+        type=float,
+        default=1e-3,
+        help="Learning rate for Gaussian rotations",
+    )
+    parser.add_argument(
+        "--lr_opacities",
+        type=float,
+        default=5e-2,
+        help="Learning rate for Gaussian opacities",
+    )
+    parser.add_argument(
+        "--lr_features",
+        type=float,
+        default=2.5e-3,
+        help="Learning rate for SH features",
+    )
+    parser.add_argument(
+        "--factor",
+        type=int,
+        default=4,
+        choices=[1, 2, 4, 8],
+        help="Image downsample factor",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed",
+    )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="cuda",
+        help="Device (cuda/cpu)",
+    )
+    return parser.parse_args()
+
+
+def load_sdxl_inpainting(device):
+    """Load SDXL Inpainting pipeline"""
+    from diffusers import StableDiffusionXLInpaintPipeline
+    
+    console.print("[cyan]Loading SDXL Inpainting model...[/cyan]")
+    pipe = StableDiffusionXLInpaintPipeline.from_pretrained(
+        "stabilityai/stable-diffusion-xl-inpainting-1.0",
+        torch_dtype=torch.float16,
+        variant="fp16",
+    ).to(device)
+    
+    # Enable memory optimizations
+    pipe.enable_attention_slicing()
+    console.print("[green]✓ SDXL Inpainting loaded[/green]")
+    return pipe
+
+
+def delete_roi_gaussians(params, roi_weights, roi_thresh):
+    """Delete Gaussians in ROI and return new parameters"""
+    mask_keep = roi_weights <= roi_thresh
+    n_original = len(roi_weights)
+    n_keep = mask_keep.sum().item()
+    n_deleted = n_original - n_keep
+    
+    console.print(f"\n[yellow]Deleting Gaussians in ROI:[/yellow]")
+    console.print(f"  Original: {n_original:,}")
+    console.print(f"  Deleted:  {n_deleted:,} ({100*n_deleted/n_original:.1f}%)")
+    console.print(f"  Keeping:  {n_keep:,} ({100*n_keep/n_original:.1f}%)")
+    
+    # Filter all parameters
+    new_params = {}
+    for key, value in params.items():
+        if isinstance(value, torch.Tensor) and len(value) == n_original:
+            new_params[key] = value[mask_keep]
+        else:
+            new_params[key] = value
+    
+    return new_params, mask_keep
+
+
+def render_view(means, quats, scales, opacities, features, viewmat, K, width, height):
+    """Render a single view using gsplat"""
+    renders, alphas, info = rasterization(
+        means=means,
+        quats=quats,
+        scales=scales,
+        opacities=opacities,
+        colors=features,
+        viewmats=viewmat[None],  # [1, 4, 4]
+        Ks=K[None],  # [1, 3, 3]
+        width=width,
+        height=height,
+        packed=False,
+        sh_degree=3,  # Assuming SH degree 3
+    )
+    return renders[0], alphas[0], info
+
+
+def inpaint_view(pipe, image, mask, prompt, negative_prompt, strength, device):
+    """Inpaint a single view using SDXL"""
+    # Convert torch tensor to PIL
+    img_np = (image.cpu().numpy() * 255).astype(np.uint8)
+    mask_np = (mask.cpu().numpy() * 255).astype(np.uint8)
+    
+    img_pil = Image.fromarray(img_np)
+    mask_pil = Image.fromarray(mask_np)
+    
+    # Ensure mask is single channel
+    if mask_pil.mode != 'L':
+        mask_pil = mask_pil.convert('L')
+    
+    # Run inpainting
+    result = pipe(
+        prompt=prompt,
+        negative_prompt=negative_prompt,
+        image=img_pil,
+        mask_image=mask_pil,
+        strength=strength,
+        num_inference_steps=50,
+        guidance_scale=7.5,
+    ).images[0]
+    
+    # Convert back to torch tensor
+    result_np = np.array(result).astype(np.float32) / 255.0
+    return torch.from_numpy(result_np).to(device)
+
+
+def main():
+    args = parse_args()
+    device = torch.device(args.device)
+    set_random_seed(args.seed)
+    
+    console.print("\n[bold cyan]" + "="*80 + "[/bold cyan]")
+    console.print("[bold cyan]05 - Remove Object and Inpaint Hole[/bold cyan]")
+    console.print("[bold cyan]" + "="*80 + "[/bold cyan]\n")
+    
+    # Setup paths
+    ckpt_path = Path(args.ckpt)
+    roi_path = Path(args.roi)
+    data_root = Path(args.data_root)
+    
+    if args.output_dir is None:
+        output_dir = roi_path.parent / "05_patched"
+    else:
+        output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    holed_dir = output_dir / "holed_renders" / "train"
+    inpainted_dir = output_dir / "inpainted_targets" / "train"
+    final_dir = output_dir / "final_renders" / "train"
+    holed_dir.mkdir(parents=True, exist_ok=True)
+    inpainted_dir.mkdir(parents=True, exist_ok=True)
+    final_dir.mkdir(parents=True, exist_ok=True)
+    
+    console.print(f"[cyan]Output directory:[/cyan] {output_dir}")
+    console.print(f"[cyan]ROI threshold:[/cyan] {args.roi_thresh}")
+    console.print(f"[cyan]Optimization iterations:[/cyan] {args.iters}\n")
+    
+    # Load checkpoint
+    console.print("[cyan]Loading 3DGS checkpoint...[/cyan]")
+    ckpt = torch.load(ckpt_path, map_location=device)
+    params = ckpt["splats"]
+    console.print(f"[green]✓ Loaded {len(params['means']):,} Gaussians[/green]")
+    
+    # Load ROI weights
+    console.print("[cyan]Loading ROI weights...[/cyan]")
+    roi_weights = torch.load(roi_path, map_location=device)
+    console.print(f"[green]✓ Loaded ROI weights (mean: {roi_weights.mean():.3f})[/green]")
+    
+    # Delete Gaussians in ROI
+    params_holed, mask_keep = delete_roi_gaussians(params, roi_weights, args.roi_thresh)
+    
+    # Load dataset
+    console.print("\n[cyan]Loading dataset...[/cyan]")
+    parser = Parser(data_root, factor=args.factor, normalize=True, test_every=8)
+    dataset = Dataset(parser, split="train")
+    console.print(f"[green]✓ Loaded {len(dataset)} training views[/green]")
+    
+    # Load SDXL Inpainting
+    pipe = load_sdxl_inpainting(device)
+    
+    # Step 1: Render holed scene
+    console.print("\n[bold yellow]Step 1: Rendering holed scene...[/bold yellow]")
+    holed_renders = []
+    roi_masks = []
+    
+    for idx in track(range(len(dataset)), description="Rendering views"):
+        data = dataset[idx]
+        camtoworld = data["camtoworld"].to(device)
+        K = data["K"].to(device)
+        width = data["width"]
+        height = data["height"]
+        
+        # World to camera transform
+        worldtoview = torch.inverse(camtoworld)
+        
+        # Render holed scene
+        render, alpha, _ = render_view(
+            means=params_holed["means"],
+            quats=params_holed["quats"],
+            scales=params_holed["scales"],
+            opacities=params_holed["opacities"],
+            features=params_holed["sh0"],  # Base SH coefficient
+            viewmat=worldtoview,
+            K=K,
+            width=width,
+            height=height,
+        )
+        
+        holed_renders.append(render)
+        
+        # Create mask from alpha channel (holes have low alpha)
+        mask = (alpha < 0.5).float().unsqueeze(-1).expand_as(render)
+        roi_masks.append(mask)
+        
+        # Save holed render
+        img_np = (render.cpu().numpy() * 255).astype(np.uint8)
+        mask_np = (mask[:, :, 0].cpu().numpy() * 255).astype(np.uint8)
+        cv2.imwrite(str(holed_dir / f"{idx:05d}.png"), cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR))
+        cv2.imwrite(str(holed_dir / f"{idx:05d}_mask.png"), mask_np)
+    
+    console.print(f"[green]✓ Saved holed renders to {holed_dir}[/green]")
+    
+    # Step 2: Inpaint each view
+    console.print("\n[bold yellow]Step 2: Inpainting holes...[/bold yellow]")
+    inpainted_targets = []
+    
+    for idx in track(range(len(dataset)), description="Inpainting views"):
+        render = holed_renders[idx]
+        mask = roi_masks[idx][:, :, 0]  # Single channel
+        
+        # Run SDXL inpainting
+        inpainted = inpaint_view(
+            pipe=pipe,
+            image=render,
+            mask=mask,
+            prompt=args.prompt,
+            negative_prompt=args.negative_prompt,
+            strength=args.inpaint_strength,
+            device=device,
+        )
+        
+        inpainted_targets.append(inpainted)
+        
+        # Save inpainted target
+        img_np = (inpainted.cpu().numpy() * 255).astype(np.uint8)
+        cv2.imwrite(str(inpainted_dir / f"{idx:05d}.png"), cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR))
+    
+    console.print(f"[green]✓ Saved inpainted targets to {inpainted_dir}[/green]")
+    
+    # Step 3: Optimize to match inpainted targets
+    console.print("\n[bold yellow]Step 3: Optimizing 3DGS to match targets...[/bold yellow]")
+    
+    # Setup optimizable parameters
+    means = torch.nn.Parameter(params_holed["means"].clone())
+    quats = torch.nn.Parameter(params_holed["quats"].clone())
+    scales = torch.nn.Parameter(params_holed["scales"].clone())
+    opacities = torch.nn.Parameter(params_holed["opacities"].clone())
+    features = torch.nn.Parameter(params_holed["sh0"].clone())
+    
+    optimizer = torch.optim.Adam([
+        {"params": [means], "lr": args.lr_means, "name": "means"},
+        {"params": [quats], "lr": args.lr_quats, "name": "quats"},
+        {"params": [scales], "lr": args.lr_scales, "name": "scales"},
+        {"params": [opacities], "lr": args.lr_opacities, "name": "opacities"},
+        {"params": [features], "lr": args.lr_features, "name": "features"},
+    ])
+    
+    losses = []
+    
+    for iter_idx in track(range(args.iters), description="Optimizing"):
+        # Random view
+        idx = torch.randint(0, len(dataset), (1,)).item()
+        data = dataset[idx]
+        
+        camtoworld = data["camtoworld"].to(device)
+        K = data["K"].to(device)
+        width = data["width"]
+        height = data["height"]
+        worldtoview = torch.inverse(camtoworld)
+        target = inpainted_targets[idx]
+        
+        # Render
+        render, alpha, _ = render_view(
+            means=means,
+            quats=quats,
+            scales=scales,
+            opacities=opacities,
+            features=features,
+            viewmat=worldtoview,
+            K=K,
+            width=width,
+            height=height,
+        )
+        
+        # L1 loss
+        loss = torch.nn.functional.l1_loss(render, target)
+        
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        
+        losses.append(loss.item())
+        
+        # Log every 100 iterations
+        if (iter_idx + 1) % 100 == 0:
+            console.print(f"  Iter {iter_idx+1}/{args.iters}: Loss = {loss.item():.4f}")
+    
+    console.print(f"[green]✓ Optimization complete (final loss: {losses[-1]:.4f})[/green]")
+    
+    # Step 4: Save final checkpoint and renders
+    console.print("\n[bold yellow]Step 4: Saving results...[/bold yellow]")
+    
+    final_params = {
+        "means": means.detach(),
+        "quats": quats.detach(),
+        "scales": scales.detach(),
+        "opacities": opacities.detach(),
+        "sh0": features.detach(),
+    }
+    
+    final_ckpt = {"splats": final_params}
+    torch.save(final_ckpt, output_dir / "ckpt_patched.pt")
+    console.print(f"[green]✓ Saved checkpoint to {output_dir / 'ckpt_patched.pt'}[/green]")
+    
+    # Render final results
+    for idx in track(range(len(dataset)), description="Rendering final"):
+        data = dataset[idx]
+        camtoworld = data["camtoworld"].to(device)
+        K = data["K"].to(device)
+        width = data["width"]
+        height = data["height"]
+        worldtoview = torch.inverse(camtoworld)
+        
+        render, _, _ = render_view(
+            means=means,
+            quats=quats,
+            scales=scales,
+            opacities=opacities,
+            features=features,
+            viewmat=worldtoview,
+            K=K,
+            width=width,
+            height=height,
+        )
+        
+        img_np = (render.detach().cpu().numpy() * 255).astype(np.uint8)
+        cv2.imwrite(str(final_dir / f"{idx:05d}.png"), cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR))
+    
+    console.print(f"[green]✓ Saved final renders to {final_dir}[/green]")
+    
+    # Save manifest
+    manifest = {
+        "module": "05_remove_and_patch",
+        "timestamp": datetime.now().isoformat(),
+        "inputs": {
+            "checkpoint": str(ckpt_path),
+            "roi": str(roi_path),
+            "data_root": str(data_root),
+        },
+        "parameters": {
+            "roi_thresh": args.roi_thresh,
+            "inpaint_strength": args.inpaint_strength,
+            "prompt": args.prompt,
+            "negative_prompt": args.negative_prompt,
+            "iters": args.iters,
+            "lr_means": args.lr_means,
+            "lr_scales": args.lr_scales,
+            "lr_quats": args.lr_quats,
+            "lr_opacities": args.lr_opacities,
+            "lr_features": args.lr_features,
+            "factor": args.factor,
+            "seed": args.seed,
+        },
+        "results": {
+            "n_views": len(dataset),
+            "n_original_gaussians": len(roi_weights),
+            "n_deleted_gaussians": int((roi_weights > args.roi_thresh).sum().item()),
+            "n_final_gaussians": len(means),
+            "final_loss": float(losses[-1]),
+        },
+    }
+    
+    with open(output_dir / "manifest.json", "w") as f:
+        json.dump(manifest, f, indent=2)
+    
+    console.print(f"[green]✓ Saved manifest to {output_dir / 'manifest.json'}[/green]")
+    
+    console.print("\n[bold green]" + "="*80 + "[/bold green]")
+    console.print("[bold green]✓ Module 05 Complete![/bold green]")
+    console.print(f"[bold green]Output: {output_dir}[/bold green]")
+    console.print("[bold green]" + "="*80 + "[/bold green]\n")
+
+
+if __name__ == "__main__":
+    main()
