@@ -37,6 +37,8 @@ import torch
 from tqdm import tqdm
 from rich.console import Console
 
+from project_utils.config import ProjectConfig
+
 console = Console()
 
 # Add gsplat examples to path
@@ -58,13 +60,14 @@ except ImportError:
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Remove ROI and render holes")
-    parser.add_argument("--ckpt", type=str, required=True, help="Path to 3DGS checkpoint")
-    parser.add_argument("--roi", type=str, required=True, help="Path to ROI weights")
-    parser.add_argument("--data_root", type=str, required=True, help="Dataset root")
-    parser.add_argument("--output_dir", type=str, default=None, help="Output directory")
-    parser.add_argument("--roi_thresh", type=float, default=0.7, help="ROI threshold")
-    parser.add_argument("--factor", type=int, default=4, choices=[1,2,4,8], help="Downsample factor")
-    parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument("--config", type=str, default="config.yaml", help="Path to config file (default: config.yaml)")
+    parser.add_argument("--ckpt", type=str, default=None, help="Path to 3DGS checkpoint (overrides config)")
+    parser.add_argument("--roi", type=str, default=None, help="Path to ROI weights (overrides config)")
+    parser.add_argument("--data_root", type=str, default=None, help="Dataset root (overrides config)")
+    parser.add_argument("--output_dir", type=str, default=None, help="Output directory (overrides config)")
+    parser.add_argument("--roi_thresh", type=float, default=None, help="ROI threshold (overrides config)")
+    parser.add_argument("--factor", type=int, default=None, choices=[1,2,4,8], help="Downsample factor (overrides config)")
+    parser.add_argument("--seed", type=int, default=None, help="Random seed (overrides config)")
     parser.add_argument("--device", type=str, default="cuda", help="Device")
     return parser.parse_args()
 
@@ -119,22 +122,31 @@ def render_view(means, quats, scales, opacities, sh0, shN, viewmat, K, width, he
 
 def main():
     args = parse_args()
+    
+    # Load config
+    config = ProjectConfig(args.config)
+    
+    # Override config with command-line arguments
+    ckpt = args.ckpt if args.ckpt else str(config.get_checkpoint_path('initial'))
+    roi_path = args.roi if args.roi else str(config.get_path('roi') / 'roi.pt')
+    data_root = args.data_root if args.data_root else str(config.get_path('dataset_root'))
+    output_dir = args.output_dir if args.output_dir else str(config.get_path('roi') / '05a_holed')
+    roi_thresh = args.roi_thresh if args.roi_thresh is not None else config.config['roi']['threshold']
+    factor = args.factor if args.factor is not None else config.config['dataset']['factor']
+    seed = args.seed if args.seed is not None else config.config['dataset']['seed']
+    
     device = torch.device(args.device)
-    set_random_seed(args.seed)
+    set_random_seed(seed)
     
     console.print("\n[bold cyan]" + "="*80 + "[/bold cyan]")
     console.print("[bold cyan]05a - Remove ROI and Render Holes[/bold cyan]")
     console.print("[bold cyan]" + "="*80 + "[/bold cyan]\n")
     
     # Setup paths
-    ckpt_path = Path(args.ckpt)
-    roi_path = Path(args.roi)
-    data_root = Path(args.data_root)
-    
-    if args.output_dir is None:
-        output_dir = roi_path.parent / "05a_holed"
-    else:
-        output_dir = Path(args.output_dir)
+    ckpt_path = Path(ckpt)
+    roi_path = Path(roi_path)
+    data_root = Path(data_root)
+    output_dir = Path(output_dir)
     
     renders_dir = output_dir / "renders" / "train"
     masks_dir = output_dir / "masks" / "train"
@@ -142,7 +154,7 @@ def main():
     masks_dir.mkdir(parents=True, exist_ok=True)
     
     console.print(f"[cyan]Output directory:[/cyan] {output_dir}")
-    console.print(f"[cyan]ROI threshold:[/cyan] {args.roi_thresh}\n")
+    console.print(f"[cyan]ROI threshold:[/cyan] {roi_thresh}\n")
     
     # Load checkpoint
     console.print("[cyan]Loading 3DGS checkpoint...[/cyan]")
@@ -156,11 +168,11 @@ def main():
     console.print(f"[green]✓ Loaded ROI (mean: {roi_weights.mean():.3f})[/green]")
     
     # Delete ROI Gaussians
-    params_holed, mask_keep, n_deleted = delete_roi_gaussians(params, roi_weights, args.roi_thresh)
+    params_holed, mask_keep, n_deleted = delete_roi_gaussians(params, roi_weights, roi_thresh)
     
     # Load dataset
     console.print("\n[cyan]Loading dataset...[/cyan]")
-    parser = Parser(data_root, factor=args.factor, normalize=True, test_every=8)
+    parser = Parser(data_root, factor=factor, normalize=True, test_every=8)
     dataset = Dataset(parser, split="train")
     console.print(f"[green]✓ Loaded {len(dataset)} training views[/green]")
     
@@ -215,15 +227,16 @@ def main():
     manifest = {
         "module": "05a_remove_and_render_holes",
         "timestamp": datetime.now().isoformat(),
+        "config_file": args.config,
         "inputs": {
             "checkpoint": str(ckpt_path),
             "roi": str(roi_path),
             "data_root": str(data_root),
         },
         "parameters": {
-            "roi_thresh": args.roi_thresh,
-            "factor": args.factor,
-            "seed": args.seed,
+            "roi_thresh": roi_thresh,
+            "factor": factor,
+            "seed": seed,
         },
         "results": {
             "n_views": len(dataset),
@@ -233,8 +246,8 @@ def main():
         },
     }
     
-    with open(output_dir / "manifest.json", "w") as f:
-        json.dump(manifest, f, indent=2)
+    config.save_manifest("05a_remove_and_render_holes", manifest)
+    console.print(f"\n[green]✓ Saved manifest to {config.get_path('logs') / '05a_remove_and_render_holes_manifest.json'}[/green]")
     
     console.print("\n[bold green]✓ Module 05a Complete![/bold green]")
     console.print(f"[bold green]Next: Run 05b to inpaint the holes[/bold green]\n")
