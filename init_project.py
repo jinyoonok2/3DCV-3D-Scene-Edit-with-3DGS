@@ -11,7 +11,7 @@ The config.yaml file lives in the ROOT directory, not in outputs/.
 import argparse
 import yaml
 from pathlib import Path
-from utils.config import ProjectConfig
+from project_utils.config import ProjectConfig
 
 
 def main():

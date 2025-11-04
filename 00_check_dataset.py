@@ -32,20 +32,29 @@ import torch
 sys.path.insert(0, str(Path(__file__).parent / "gsplat-src" / "examples"))
 from datasets.colmap import Parser
 
+# Import project config (no name conflict now)
+from project_utils.config import ProjectConfig
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Validate dataset inputs")
     parser.add_argument(
+        "--config",
+        type=str,
+        default="config.yaml",
+        help="Path to config file (default: config.yaml)",
+    )
+    parser.add_argument(
         "--data_root",
         type=str,
-        required=True,
-        help="Path to the dataset directory (e.g., datasets/360_v2/garden/)",
+        default=None,
+        help="Path to the dataset directory (overrides config)",
     )
     parser.add_argument(
         "--output_dir",
         type=str,
         default=None,
-        help="Output directory for validation results",
+        help="Output directory for validation results (overrides config)",
     )
     parser.add_argument(
         "--n_thumbs",
@@ -56,8 +65,8 @@ def parse_args():
     parser.add_argument(
         "--factor",
         type=int,
-        default=4,
-        help="Downsample factor for loading dataset",
+        default=None,
+        help="Downsample factor for loading dataset (overrides config)",
     )
     parser.add_argument(
         "--normalize",
@@ -241,35 +250,39 @@ def write_summary(output_dir: Path, stats: dict, parser_obj: Parser):
 def main():
     args = parse_args()
     
-    # Determine output directory
-    if args.output_dir is None:
-        dataset_name = Path(args.data_root).name
-        args.output_dir = f"outputs/{dataset_name}/00_dataset"
+    # Load config
+    config = ProjectConfig(args.config)
     
-    output_dir = Path(args.output_dir)
+    # Override config with command-line arguments
+    data_root = args.data_root if args.data_root else str(config.get_path('dataset_root'))
+    output_dir = args.output_dir if args.output_dir else str(config.get_path('dataset_check'))
+    factor = args.factor if args.factor is not None else config.config['dataset']['factor']
+    
+    output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
     print("=" * 80)
     print("Dataset Validation")
     print("=" * 80)
-    print(f"Data root: {args.data_root}")
+    print(f"Config: {args.config}")
+    print(f"Data root: {data_root}")
     print(f"Output directory: {output_dir}")
-    print(f"Downsample factor: {args.factor}")
+    print(f"Downsample factor: {factor}")
     print()
     
     # Check if data directory exists
-    if not os.path.exists(args.data_root):
-        print(f"ERROR: Data directory does not exist: {args.data_root}")
+    if not os.path.exists(data_root):
+        print(f"ERROR: Data directory does not exist: {data_root}")
         sys.exit(1)
     
     # Load dataset using COLMAP parser
     print("Loading dataset...")
     try:
         parser_obj = Parser(
-            data_dir=args.data_root,
-            factor=args.factor,
+            data_dir=data_root,
+            factor=factor,
             normalize=args.normalize,
-            test_every=8,  # Standard test split
+            test_every=config.config['dataset'].get('test_every', 8),
         )
         print(f"✓ Successfully loaded dataset")
         print(f"  - {len(parser_obj.image_names)} images")
@@ -303,10 +316,11 @@ def main():
     manifest = {
         "module": "00_check_dataset",
         "timestamp": datetime.now().isoformat(),
-        "data_root": args.data_root,
+        "config_file": args.config,
+        "data_root": data_root,
         "output_dir": str(output_dir),
         "parameters": {
-            "factor": args.factor,
+            "factor": factor,
             "normalize": args.normalize,
             "n_thumbs": args.n_thumbs,
         },
@@ -317,9 +331,7 @@ def main():
         },
     }
     
-    manifest_path = output_dir / "manifest.json"
-    with open(manifest_path, "w") as f:
-        json.dump(manifest, f, indent=2)
+    config.save_manifest("00_check_dataset", manifest)
     
     print(f"Manifest saved to: {manifest_path}")
     print()

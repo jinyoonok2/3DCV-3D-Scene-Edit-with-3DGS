@@ -37,26 +37,35 @@ from utils import set_random_seed
 
 from gsplat.rendering import rasterization
 
+# Import project config
+from project_utils.config import ProjectConfig
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Render pre-edit training views")
     parser.add_argument(
+        "--config",
+        type=str,
+        default="config.yaml",
+        help="Path to config file (default: config.yaml)",
+    )
+    parser.add_argument(
         "--ckpt",
         type=str,
-        required=True,
-        help="Path to the checkpoint file",
+        default=None,
+        help="Path to the checkpoint file (overrides config)",
     )
     parser.add_argument(
         "--data_root",
         type=str,
-        required=True,
-        help="Path to the dataset directory",
+        default=None,
+        help="Path to the dataset directory (overrides config)",
     )
     parser.add_argument(
         "--output_dir",
         type=str,
         default=None,
-        help="Output directory for renders",
+        help="Output directory for renders (overrides config)",
     )
     parser.add_argument(
         "--views",
@@ -67,26 +76,26 @@ def parse_args():
     parser.add_argument(
         "--seed",
         type=int,
-        default=42,
-        help="Random seed",
+        default=None,
+        help="Random seed (overrides config)",
     )
     parser.add_argument(
         "--factor",
         type=int,
-        default=4,
-        help="Downsample factor for dataset",
+        default=None,
+        help="Downsample factor for dataset (overrides config)",
     )
     parser.add_argument(
         "--test_every",
         type=int,
-        default=8,
-        help="Every N images is a test image",
+        default=None,
+        help="Every N images is a test image (overrides config)",
     )
     parser.add_argument(
         "--sh_degree",
         type=int,
-        default=3,
-        help="Degree of spherical harmonics",
+        default=None,
+        help="Degree of spherical harmonics (overrides config)",
     )
     parser.add_argument(
         "--round_num",
@@ -183,20 +192,29 @@ def select_views(dataset, views_arg):
 
 def main():
     args = parse_args()
-    set_random_seed(args.seed)
     
-    # Determine output directory
-    if args.output_dir is None:
-        dataset_name = Path(args.data_root).name
-        args.output_dir = f"outputs/{dataset_name}/round_{args.round_num:03d}/pre_edit"
+    # Load config
+    config = ProjectConfig(args.config)
     
-    output_dir = Path(args.output_dir)
+    # Override config with command-line arguments
+    ckpt = args.ckpt if args.ckpt else str(config.get_checkpoint_path('initial'))
+    data_root = args.data_root if args.data_root else str(config.get_path('dataset_root'))
+    output_dir = args.output_dir if args.output_dir else str(config.get_path('renders'))
+    seed = args.seed if args.seed is not None else config.config['dataset']['seed']
+    factor = args.factor if args.factor is not None else config.config['dataset']['factor']
+    test_every = args.test_every if args.test_every is not None else config.config['dataset']['test_every']
+    sh_degree = args.sh_degree if args.sh_degree is not None else config.config['training']['sh_degree']
+    
+    set_random_seed(seed)
+    
+    output_dir = Path(output_dir)
     
     print("=" * 80)
     print("Render Pre-Edit Training Views")
     print("=" * 80)
-    print(f"Checkpoint: {args.ckpt}")
-    print(f"Data root: {args.data_root}")
+    print(f"Config: {args.config}")
+    print(f"Checkpoint: {ckpt}")
+    print(f"Data root: {data_root}")
     print(f"Output directory: {output_dir}")
     print(f"Views: {args.views}")
     print()
@@ -204,15 +222,15 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     
     # Load checkpoint
-    splats = load_checkpoint(args.ckpt, device=device)
+    splats = load_checkpoint(ckpt, device=device)
     
     # Load dataset
     print("Loading dataset...")
     parser_obj = Parser(
-        data_dir=args.data_root,
-        factor=args.factor,
+        data_dir=data_root,
+        factor=factor,
         normalize=True,
-        test_every=args.test_every,
+        test_every=test_every,
     )
     
     # Handle different view selections with subfolders
@@ -265,7 +283,7 @@ def main():
                     Ks=K,
                     width=width,
                     height=height,
-                    sh_degree=args.sh_degree,
+                    sh_degree=sh_degree,
                 )
             
             # Clamp and convert to numpy
@@ -300,14 +318,15 @@ def main():
     manifest = {
         "module": "02_render_training_views",
         "timestamp": datetime.now().isoformat(),
-        "checkpoint": args.ckpt,
-        "data_root": args.data_root,
+        "config_file": args.config,
+        "checkpoint": ckpt,
+        "data_root": data_root,
         "output_dir": str(output_dir),
         "parameters": {
             "views": args.views,
-            "seed": args.seed,
-            "factor": args.factor,
-            "sh_degree": args.sh_degree,
+            "seed": seed,
+            "factor": factor,
+            "sh_degree": sh_degree,
             "round_num": args.round_num,
         },
         "num_views": len(all_rendered_paths),
@@ -318,9 +337,7 @@ def main():
         },
     }
     
-    manifest_path = output_dir / "manifest.json"
-    with open(manifest_path, "w") as f:
-        json.dump(manifest, f, indent=2)
+    config.save_manifest("02_render_training_views", manifest)
     
     print(f"Manifest saved to: {manifest_path}")
     print()

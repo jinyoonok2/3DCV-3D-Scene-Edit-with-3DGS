@@ -40,6 +40,7 @@ from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 
 # Add gsplat examples to path
 sys.path.insert(0, str(Path(__file__).parent / "gsplat-src" / "examples"))
+
 from datasets.colmap import Dataset, Parser
 from fused_ssim import fused_ssim
 from utils import knn, rgb_to_sh, set_random_seed
@@ -48,38 +49,47 @@ from gsplat import export_splats
 from gsplat.rendering import rasterization
 from gsplat.strategy import DefaultStrategy
 
+# Import project config (no name conflict now)
+from project_utils.config import ProjectConfig
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Train initial 3D Gaussian Splatting scene")
     parser.add_argument(
+        "--config",
+        type=str,
+        default="config.yaml",
+        help="Path to config file (default: config.yaml)",
+    )
+    parser.add_argument(
         "--data_root",
         type=str,
-        required=True,
-        help="Path to the dataset directory",
+        default=None,
+        help="Path to the dataset directory (overrides config)",
     )
     parser.add_argument(
         "--output_dir",
         type=str,
         default=None,
-        help="Output directory for training results",
+        help="Output directory for training results (overrides config)",
     )
     parser.add_argument(
         "--iters",
         type=int,
-        default=30000,
-        help="Number of training iterations",
+        default=None,
+        help="Number of training iterations (overrides config)",
     )
     parser.add_argument(
         "--seed",
         type=int,
-        default=42,
-        help="Random seed",
+        default=None,
+        help="Random seed (overrides config)",
     )
     parser.add_argument(
         "--factor",
         type=int,
-        default=4,
-        help="Downsample factor for dataset",
+        default=None,
+        help="Downsample factor for dataset (overrides config)",
     )
     parser.add_argument(
         "--batch_size",
@@ -90,8 +100,8 @@ def parse_args():
     parser.add_argument(
         "--test_every",
         type=int,
-        default=8,
-        help="Every N images is a test image",
+        default=None,
+        help="Every N images is a test image (overrides config)",
     )
     parser.add_argument(
         "--ckpt",
@@ -107,7 +117,7 @@ def parse_args():
     parser.add_argument(
         "--sh_degree",
         type=int,
-        default=3,
+        default=None,
         help="Degree of spherical harmonics",
     )
     parser.add_argument(
@@ -232,7 +242,7 @@ def rasterize_splats(
     return render_colors, render_alphas, info
 
 
-def train(args, splats, optimizers, trainloader, parser_obj, device, output_dir):
+def train(iters, sh_degree, splats, optimizers, trainloader, parser_obj, device, output_dir):
     """Train the 3D Gaussian Splatting model."""
     # Setup strategy for densification
     scene_scale = parser_obj.scene_scale * 1.1
@@ -248,12 +258,12 @@ def train(args, splats, optimizers, trainloader, parser_obj, device, output_dir)
     
     # Learning rate scheduler for means
     scheduler = torch.optim.lr_scheduler.ExponentialLR(
-        optimizers["means"], gamma=0.01 ** (1.0 / args.iters)
+        optimizers["means"], gamma=0.01 ** (1.0 / iters)
     )
     
     # Training loop
     trainloader_iter = iter(trainloader)
-    pbar = tqdm.tqdm(range(args.iters))
+    pbar = tqdm.tqdm(range(iters))
     
     for step in pbar:
         try:
@@ -268,7 +278,7 @@ def train(args, splats, optimizers, trainloader, parser_obj, device, output_dir)
         height, width = pixels.shape[1:3]
         
         # SH degree schedule
-        sh_degree_to_use = min(step // 1000, args.sh_degree)
+        sh_degree_to_use = min(step // 1000, sh_degree)
         
         # Forward pass
         renders, alphas, info = rasterize_splats(
@@ -335,7 +345,7 @@ def train(args, splats, optimizers, trainloader, parser_obj, device, output_dir)
 
 
 @torch.no_grad()
-def evaluate_and_render(args, splats, valset, device, output_dir):
+def evaluate_and_render(sh_degree, splats, valset, device, output_dir):
     """Evaluate the model and render validation views."""
     render_dir = output_dir / "renders"
     render_dir.mkdir(exist_ok=True)
@@ -367,7 +377,7 @@ def evaluate_and_render(args, splats, valset, device, output_dir):
             Ks=Ks,
             width=width,
             height=height,
-            sh_degree=args.sh_degree,
+            sh_degree=sh_degree,
         )
         
         colors = torch.clamp(colors, 0.0, 1.0)
@@ -404,23 +414,32 @@ def evaluate_and_render(args, splats, valset, device, output_dir):
 
 def main():
     args = parse_args()
-    set_random_seed(args.seed)
     
-    # Determine output directory
-    if args.output_dir is None:
-        dataset_name = Path(args.data_root).name
-        args.output_dir = f"outputs/{dataset_name}/01_gs_base"
+    # Load config
+    config = ProjectConfig(args.config)
     
-    output_dir = Path(args.output_dir)
+    # Override config with command-line arguments
+    data_root = args.data_root if args.data_root else str(config.get_path('dataset_root'))
+    output_dir = args.output_dir if args.output_dir else str(config.get_path('initial_training'))
+    iters = args.iters if args.iters is not None else config.config['training']['iterations']
+    seed = args.seed if args.seed is not None else config.config['dataset']['seed']
+    factor = args.factor if args.factor is not None else config.config['dataset']['factor']
+    test_every = args.test_every if args.test_every is not None else config.config['dataset']['test_every']
+    sh_degree = args.sh_degree if hasattr(args, 'sh_degree') and args.sh_degree is not None else config.config['training']['sh_degree']
+    
+    set_random_seed(seed)
+    
+    output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
     print("=" * 80)
     print("Initial 3DGS Training")
     print("=" * 80)
-    print(f"Data root: {args.data_root}")
+    print(f"Config: {args.config}")
+    print(f"Data root: {data_root}")
     print(f"Output directory: {output_dir}")
-    print(f"Iterations: {args.iters}")
-    print(f"Seed: {args.seed}")
+    print(f"Iterations: {iters}")
+    print(f"Seed: {seed}")
     print()
     
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -428,10 +447,10 @@ def main():
     # Load dataset
     print("Loading dataset...")
     parser_obj = Parser(
-        data_dir=args.data_root,
-        factor=args.factor,
+        data_dir=data_root,
+        factor=factor,
         normalize=True,
-        test_every=args.test_every,
+        test_every=test_every,
     )
     trainset = Dataset(parser_obj, split="train")
     valset = Dataset(parser_obj, split="val")
@@ -450,7 +469,7 @@ def main():
         splats, optimizers = create_splats_with_optimizers(
             parser_obj,
             scene_scale=parser_obj.scene_scale * 1.1,
-            sh_degree=args.sh_degree,
+            sh_degree=sh_degree,
             batch_size=args.batch_size,
             device=device,
         )
@@ -465,7 +484,7 @@ def main():
             splats, optimizers = create_splats_with_optimizers(
                 parser_obj,
                 scene_scale=parser_obj.scene_scale * 1.1,
-                sh_degree=args.sh_degree,
+                sh_degree=sh_degree,
                 batch_size=args.batch_size,
                 device=device,
             )
@@ -494,17 +513,17 @@ def main():
                 pin_memory=True,
             )
             
-            train(args, splats, optimizers, trainloader, parser_obj, device, output_dir)
+            train(iters, sh_degree, splats, optimizers, trainloader, parser_obj, device, output_dir)
             
             # Save checkpoint
             print(f"\nSaving checkpoint to: {ckpt_path}")
-            torch.save({"step": args.iters, "splats": splats.state_dict()}, ckpt_path)
+            torch.save({"step": iters, "splats": splats.state_dict()}, ckpt_path)
     else:
         # Train from scratch
         splats, optimizers = create_splats_with_optimizers(
             parser_obj,
             scene_scale=parser_obj.scene_scale * 1.1,
-            sh_degree=args.sh_degree,
+            sh_degree=sh_degree,
             batch_size=args.batch_size,
             device=device,
         )
@@ -522,11 +541,11 @@ def main():
             pin_memory=True,
         )
         
-        train(args, splats, optimizers, trainloader, parser_obj, device, output_dir)
+        train(iters, sh_degree, splats, optimizers, trainloader, parser_obj, device, output_dir)
         
     # Save checkpoint
     print(f"\nSaving checkpoint to: {ckpt_path}")
-    torch.save({"step": args.iters, "splats": splats.state_dict()}, ckpt_path)
+    torch.save({"step": iters, "splats": splats.state_dict()}, ckpt_path)
     
     # Export PLY if requested
     if args.save_ply:
@@ -546,27 +565,28 @@ def main():
     
     # Evaluate
     print("\nEvaluating model...")
-    stats = evaluate_and_render(args, splats, valset, device, output_dir)    # Create manifest
+    stats = evaluate_and_render(sh_degree, splats, valset, device, output_dir)
+    
+    # Create manifest
     manifest = {
         "module": "01_train_gs_initial",
         "timestamp": datetime.now().isoformat(),
-        "data_root": args.data_root,
+        "config_file": args.config,
+        "data_root": data_root,
         "output_dir": str(output_dir),
         "parameters": {
-            "iters": args.iters,
-            "seed": args.seed,
-            "factor": args.factor,
+            "iters": iters,
+            "seed": seed,
+            "factor": factor,
             "batch_size": args.batch_size,
-            "sh_degree": args.sh_degree,
+            "sh_degree": sh_degree,
             "ssim_lambda": args.ssim_lambda,
         },
         "metrics": stats,
         "checkpoint": str(ckpt_path),
     }
     
-    manifest_path = output_dir / "manifest.json"
-    with open(manifest_path, "w") as f:
-        json.dump(manifest, f, indent=2)
+    config.save_manifest("01_train_gs_initial", manifest)
     
     print(f"\nManifest saved to: {manifest_path}")
     print()
