@@ -242,7 +242,7 @@ def rasterize_splats(
     return render_colors, render_alphas, info
 
 
-def train(iters, sh_degree, splats, optimizers, trainloader, parser_obj, device, output_dir):
+def train(iters, sh_degree, splats, optimizers, trainloader, parser_obj, device, output_dir, ssim_lambda):
     """Train the 3D Gaussian Splatting model."""
     # Setup strategy for densification
     scene_scale = parser_obj.scene_scale * 1.1
@@ -307,7 +307,7 @@ def train(iters, sh_degree, splats, optimizers, trainloader, parser_obj, device,
         ssimloss = 1.0 - fused_ssim(
             colors.permute(0, 3, 1, 2), pixels.permute(0, 3, 1, 2), padding="valid"
         )
-        loss = l1loss * (1.0 - args.ssim_lambda) + ssimloss * args.ssim_lambda
+        loss = l1loss * (1.0 - ssim_lambda) + ssimloss * ssim_lambda
         
         loss.backward()
         
@@ -426,6 +426,7 @@ def main():
     factor = args.factor if args.factor is not None else config.config['dataset']['factor']
     test_every = args.test_every if args.test_every is not None else config.config['dataset']['test_every']
     sh_degree = args.sh_degree if hasattr(args, 'sh_degree') and args.sh_degree is not None else config.config['training']['sh_degree']
+    ssim_lambda = args.ssim_lambda  # Uses argparse default of 0.2
     
     set_random_seed(seed)
     
@@ -513,7 +514,7 @@ def main():
                 pin_memory=True,
             )
             
-            train(iters, sh_degree, splats, optimizers, trainloader, parser_obj, device, output_dir)
+            train(iters, sh_degree, splats, optimizers, trainloader, parser_obj, device, output_dir, ssim_lambda)
             
             # Save checkpoint
             print(f"\nSaving checkpoint to: {ckpt_path}")
@@ -541,7 +542,7 @@ def main():
             pin_memory=True,
         )
         
-        train(iters, sh_degree, splats, optimizers, trainloader, parser_obj, device, output_dir)
+        train(iters, sh_degree, splats, optimizers, trainloader, parser_obj, device, output_dir, ssim_lambda)
         
     # Save checkpoint
     print(f"\nSaving checkpoint to: {ckpt_path}")
@@ -580,7 +581,7 @@ def main():
             "factor": factor,
             "batch_size": args.batch_size,
             "sh_degree": sh_degree,
-            "ssim_lambda": args.ssim_lambda,
+            "ssim_lambda": ssim_lambda,
         },
         "metrics": stats,
         "checkpoint": str(ckpt_path),
