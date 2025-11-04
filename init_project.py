@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """
-Initialize a new 3DGS Scene Editing project
-Creates config file and directory structure
+Initialize a new 3DGS Scene Editing project (OPTIONAL HELPER)
+
+This is a convenience tool to quickly create a new config.yaml file.
+You can also manually copy and edit config.yaml instead.
+
+The config.yaml file lives in the ROOT directory, not in outputs/.
 """
 
 import argparse
@@ -16,14 +20,14 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Create project for removing brown plant from garden
+  # Quick create: brown plant removal (creates/updates config.yaml)
   python init_project.py --scene garden --text "brown plant" --task removal
   
-  # Create project for replacing object
-  python init_project.py --scene bicycle --text "old bike" --task replacement --new-text "red bike"
+  # Create a second project config (for experiments)
+  python init_project.py --scene bicycle --text "old bike" --config experiment2.yaml
   
-  # Use custom config
-  python init_project.py --config my_config.yaml
+  # Or just manually edit config.yaml (no need to run this script!)
+  nano config.yaml
         """
     )
     
@@ -186,12 +190,20 @@ Examples:
     print(f"\n{'='*80}")
     print(f"Next steps:")
     print(f"{'='*80}\n")
-    print(f"1. Edit config if needed: {args.config}")
-    print(f"2. Run modules with --config flag:")
-    print(f"   python 00_check_dataset.py --config {args.config}")
-    print(f"   python 01_train_gs_initial.py --config {args.config}")
-    print(f"   python 02_render_training_views.py --config {args.config}")
-    print(f"   ... and so on\n")
+    print(f"1. Review/edit config: {args.config}")
+    print(f"   nano {args.config}")
+    print(f"\n2. Run the pipeline (config.yaml is used by default):")
+    if args.config == "config.yaml":
+        print(f"   python 00_check_dataset.py")
+        print(f"   python 01_train_gs_initial.py")
+        print(f"   python 02_render_training_views.py")
+        print(f"   ... and so on")
+    else:
+        print(f"   python 00_check_dataset.py --config {args.config}")
+        print(f"   python 01_train_gs_initial.py --config {args.config}")
+        print(f"   python 02_render_training_views.py --config {args.config}")
+        print(f"   ... and so on")
+    print(f"\n3. All outputs go to: outputs/{project_name}/\n")
     
     return 0
 

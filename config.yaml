@@ -1,8 +1,21 @@
-# 3DGS Scene Editing Pipeline Configuration
-# This file defines all paths and parameters for a scene editing project
+# ============================================================================
+# 3DGS Scene Editing Pipeline - Configuration Template
+# ============================================================================
+# This is your main configuration file. Edit this before running the pipeline.
+# All modules will read settings from this file.
+#
+# Quick start:
+#   1. Edit the settings below (especially project name and segmentation prompt)
+#   2. Run: python 00_check_dataset.py (uses config.yaml by default)
+#   3. Continue with modules 01, 02, 03...
+#
+# For multiple projects, copy this file:
+#   cp config.yaml my_experiment.yaml
+#   python 00_check_dataset.py --config my_experiment.yaml
+# ============================================================================
 
 project:
-  name: "garden_brownplant_removal"        # Project identifier
+  name: "garden_brownplant_removal"        # Project identifier (output dir name)
   scene: "garden"                          # Scene name (e.g., garden, bicycle, kitchen)
   task: "removal"                          # Task type: removal, replacement, editing
   description: "Remove brown plant from garden scene"
