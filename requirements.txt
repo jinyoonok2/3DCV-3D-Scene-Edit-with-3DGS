@@ -1,7 +1,7 @@
 # Core dependencies for InstructGS
 torch>=1.12.0
 pyyaml>=6.0
-numpy>=1.21.0
+numpy>=1.21.0,<2.0  # pycolmap requires numpy<2.0
 Pillow>=9.0.0
 tqdm>=4.64.0
 opencv-python>=4.5.0
@@ -9,13 +9,24 @@ opencv-python>=4.5.0
 # For interactive interface (optional but recommended)
 rich>=12.0.0
 
-# For InstructPix2Pix integration
+# For Stable Diffusion Inpainting (Module 05-06)
 diffusers>=0.21.0
 transformers>=4.21.0
 accelerate>=0.20.0
 
-# For perceptual loss
+# For TripoSR (Module 06 - Image to 3D)
+tsr
+trimesh>=3.20.0
+rembg[gpu]>=2.0.50
+
+# For Depth Anything v2 (Module 07 - Depth estimation)
+# Loaded via Transformers from HuggingFace: depth-anything/Depth-Anything-V2-Large-hf
+# No additional installation needed - models download on first use
+
+# For perceptual loss and evaluation
 lpips>=0.1.4
+# CLIP: Install via: pip install git+https://github.com/openai/CLIP.git
+# (installed by setup.sh)
 
 # For text-to-mask generation (Module 03)
 groundingdino-py

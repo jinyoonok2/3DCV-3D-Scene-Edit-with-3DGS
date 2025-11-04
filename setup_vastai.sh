@@ -143,13 +143,13 @@ if [ -f "gsplat-src/examples/requirements.txt" ]; then
 fi
 echo ""
 
-# Install GroundingDINO
-echo "11. Installing GroundingDINO..."
-if python -c "import groundingdino" 2>/dev/null; then
-    echo "✓ GroundingDINO already installed"
+# Clone GroundingDINO repository for config files
+echo "11. Setting up GroundingDINO..."
+if [ ! -d "GroundingDINO" ]; then
+    git clone https://github.com/IDEA-Research/GroundingDINO.git
+    echo "✓ GroundingDINO repository cloned (for config files)"
 else
-    pip install groundingdino-py
-    echo "✓ GroundingDINO installed"
+    echo "✓ GroundingDINO repository already exists"
 fi
 echo ""
 
@@ -163,8 +163,36 @@ else
 fi
 echo ""
 
+# Install 3D Inpainting Pipeline dependencies
+echo "13. Installing 3D Inpainting Pipeline models..."
+echo "  (TripoSR, Depth Anything v2, CLIP)"
+
+# TripoSR for Image-to-3D (Module 06)
+if python -c "from tsr.system import TSR" 2>/dev/null; then
+    echo "  ✓ TripoSR already installed"
+else
+    echo "  Installing TripoSR..."
+    pip install tsr trimesh rembg[gpu]
+    echo "  ✓ TripoSR installed"
+fi
+
+# Depth Anything v2 for depth estimation (Module 07)
+# Note: Depth Anything V2 will be loaded via Transformers (already installed)
+# Models auto-download on first use from: depth-anything/Depth-Anything-V2-Large-hf
+echo "  ✓ Depth Anything V2 available via Transformers (models download on first use)"
+
+# CLIP for evaluation (Module 08)
+if python -c "import clip" 2>/dev/null; then
+    echo "  ✓ CLIP already installed"
+else
+    echo "  Installing CLIP..."
+    pip install git+https://github.com/openai/CLIP.git
+    echo "  ✓ CLIP installed"
+fi
+echo ""
+
 # Download model weights
-echo "13. Downloading model weights..."
+echo "14. Downloading model weights..."
 if [ ! -f "models/groundingdino_swint_ogc.pth" ] || [ ! -f "models/sam2_hiera_large.pt" ]; then
     echo "  Running download_models.sh..."
     chmod +x download_models.sh
@@ -177,25 +205,23 @@ fi
 echo ""
 
 # Final verification
-echo "14. Final verification..."
+echo "15. Final verification..."
 echo "  Testing imports..."
 python -c "
 import torch
 import gsplat
-import groundingdino
 import sam2
 import numpy as np
 import PIL
 print('✓ All core packages imported successfully')
 print(f'  PyTorch: {torch.__version__} (CUDA: {torch.cuda.is_available()})')
 print(f'  gsplat: {gsplat.__version__}')
-print('  GroundingDINO: OK')
 print('  SAM2: OK')
 "
 echo ""
 
 # Download dataset
-echo "15. Checking for dataset..."
+echo "16. Checking for dataset..."
 if [ ! -d "datasets/360_v2/garden" ]; then
     echo "  Downloading Mip-NeRF 360 garden dataset (~2.5GB)..."
     cd gsplat-src/examples

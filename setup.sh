@@ -148,8 +148,36 @@ else
 fi
 echo ""
 
+# Install 3D Inpainting Pipeline dependencies
+echo "11. Installing 3D Inpainting Pipeline models..."
+echo "  (TripoSR, Depth Anything v2, CLIP)"
+
+# TripoSR for Image-to-3D (Module 06)
+if python -c "from tsr.system import TSR" 2>/dev/null; then
+    echo "  ✓ TripoSR already installed"
+else
+    echo "  Installing TripoSR..."
+    pip install tsr trimesh rembg[gpu]
+    echo "  ✓ TripoSR installed"
+fi
+
+# Depth Anything v2 for depth estimation (Module 07)
+# Note: Depth Anything V2 will be loaded via Transformers (already installed)
+# Models auto-download on first use from: depth-anything/Depth-Anything-V2-Large-hf
+echo "  ✓ Depth Anything V2 available via Transformers (models download on first use)"
+
+# CLIP for evaluation (Module 08)
+if python -c "import clip" 2>/dev/null; then
+    echo "  ✓ CLIP already installed"
+else
+    echo "  Installing CLIP..."
+    pip install git+https://github.com/openai/CLIP.git
+    echo "  ✓ CLIP installed"
+fi
+echo ""
+
 # Download model weights
-echo "11. Downloading model weights..."
+echo "12. Downloading model weights..."
 if [ ! -f "models/groundingdino_swint_ogc.pth" ] || [ ! -f "models/sam2_hiera_large.pt" ]; then
     chmod +x download_models.sh
     ./download_models.sh
@@ -160,7 +188,7 @@ fi
 echo ""
 
 # Download dataset (optional)
-echo "12. Checking for dataset..."
+echo "13. Checking for dataset..."
 if [ ! -d "datasets/360_v2/garden" ]; then
     read -p "Download Mip-NeRF 360 garden dataset (~2.5GB)? [y/N] " -n 1 -r
     echo
