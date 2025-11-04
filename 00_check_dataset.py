@@ -332,8 +332,6 @@ def main():
     }
     
     config.save_manifest("00_check_dataset", manifest)
-    
-    print(f"Manifest saved to: {manifest_path}")
     print()
     
     # Final verification message

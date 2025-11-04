@@ -955,8 +955,6 @@ def main():
     }
     
     config.save_manifest("03_ground_text_to_masks", manifest)
-    
-    print(f"Manifest saved to: {manifest_path}")
     print()
     print("=" * 80)
     print("MASK GENERATION COMPLETE")

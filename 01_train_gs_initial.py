@@ -587,8 +587,6 @@ def main():
     }
     
     config.save_manifest("01_train_gs_initial", manifest)
-    
-    print(f"\nManifest saved to: {manifest_path}")
     print()
     print("=" * 80)
     print("TRAINING COMPLETE")

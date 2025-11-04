@@ -338,8 +338,6 @@ def main():
     }
     
     config.save_manifest("02_render_training_views", manifest)
-    
-    print(f"Manifest saved to: {manifest_path}")
     print()
     print("=" * 80)
     print("RENDERING COMPLETE")
