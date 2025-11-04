@@ -1,0 +1,115 @@
+# 3DGS Scene Editing Pipeline Configuration
+# This file defines all paths and parameters for a scene editing project
+
+project:
+  name: "garden_brownplant_removal"        # Project identifier
+  scene: "garden"                          # Scene name (e.g., garden, bicycle, kitchen)
+  task: "removal"                          # Task type: removal, replacement, editing
+  description: "Remove brown plant from garden scene"
+
+paths:
+  # Input paths
+  dataset_root: "datasets/360_v2/garden"   # Original dataset location
+  
+  # Output root (all outputs go here)
+  output_root: "outputs/${project.name}"   # Automatically uses project name
+  
+  # Module-specific output directories (relative to output_root)
+  dataset_check: "00_dataset"
+  initial_training: "01_initial_gs"
+  renders: "02_renders"
+  masks: "03_masks"
+  roi: "04_roi"
+  inpainting: "05_inpainting"
+  object_generation: "06_object_gen"       # For replacement pipeline
+  scene_merge: "07_merge"                  # For replacement pipeline
+  evaluation: "08_evaluation"              # For final evaluation
+  logs: "logs"
+
+dataset:
+  factor: 4                                # Downsampling factor (1, 2, 4, 8)
+  test_every: 8                            # Test image frequency
+  seed: 42                                 # Random seed
+
+training:
+  iterations: 30000                        # Initial GS training iterations
+  sh_degree: 3                             # Spherical harmonics degree
+  eval_steps: [7000, 30000]                # When to run evaluation
+  save_steps: [7000, 30000]                # When to save checkpoints
+
+segmentation:
+  text_prompt: "brown plant"               # Object to segment
+  box_threshold: 0.35                      # GroundingDINO box confidence
+  text_threshold: 0.25                     # GroundingDINO text confidence
+  nms_threshold: 0.8                       # Non-maximum suppression
+  sam_model: "sam2_hiera_large"            # SAM2 model variant
+  
+roi:
+  threshold: 0.3                           # ROI weight threshold for deletion
+  min_views: 3                             # Min views for Gaussian to be in ROI
+  
+inpainting:
+  # Module 05a - Removal
+  removal:
+    roi_threshold: 0.3                     # Which Gaussians to delete
+    
+  # Module 05b - SDXL Inpainting
+  sdxl:
+    model: "diffusers/stable-diffusion-xl-1.0-inpainting-0.1"
+    prompt: "natural outdoor garden scene with grass and plants"
+    negative_prompt: "brown plant, dead plant, object, artifact, blur"
+    strength: 0.99                         # How much to change (0-1)
+    guidance_scale: 7.5                    # How closely to follow prompt
+    num_inference_steps: 50                # Quality vs speed tradeoff
+    
+  # Module 05c - Optimization
+  optimization:
+    iterations: 1000                       # Optimization iterations
+    densification:
+      start_iter: 100                      # When to start densification
+      stop_iter: 800                       # When to stop densification
+      grad_thresh: 0.0002                  # Gradient threshold for densification
+      densify_every: 100                   # Densification frequency
+    learning_rates:
+      means: 0.00016                       # Position learning rate
+      scales: 0.005                        # Scale learning rate
+      quats: 0.001                         # Rotation learning rate
+      opacities: 0.05                      # Opacity learning rate
+      sh0: 0.0025                          # SH DC component learning rate
+      shN: 0.0025                          # SH rest component learning rate
+
+# Replacement-specific config (for modules 06-08)
+replacement:
+  enabled: false                           # Set to true for replacement pipeline
+  
+  # Module 06 - Object Generation
+  object_generation:
+    prompt: "red flower in pot"            # New object description
+    triposr:
+      model: "stabilityai/TripoSR"
+      foreground_ratio: 0.85
+      mc_resolution: 256                   # Marching cubes resolution
+      
+  # Module 07 - Scene Merge
+  merge:
+    depth_model: "depth-anything/Depth-Anything-V2-Large-hf"
+    alignment_method: "depth"              # depth, manual, or auto
+    scale_factor: 1.0                      # Object scale adjustment
+    
+  # Module 08 - Evaluation
+  evaluation:
+    metrics: ["clip", "lpips", "ssim", "psnr"]
+    clip_model: "ViT-B/32"
+    num_eval_views: 20                     # Number of views to evaluate
+
+# Hardware settings
+hardware:
+  device: "cuda"                           # cuda or cpu
+  num_workers: 4                           # DataLoader workers
+  mixed_precision: true                    # Use fp16 for speed
+
+# Logging
+logging:
+  level: "INFO"                            # DEBUG, INFO, WARNING, ERROR
+  save_renders: true                       # Save intermediate renders
+  save_frequency: 100                      # How often to log during training
