@@ -115,6 +115,11 @@ def parse_args():
         help="Only render from checkpoint, skip training",
     )
     parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume from existing checkpoint if available (default: retrain)",
+    )
+    parser.add_argument(
         "--sh_degree",
         type=int,
         default=None,
@@ -477,22 +482,23 @@ def main():
         splats.load_state_dict(checkpoint["splats"])
         print(f"✓ Checkpoint loaded: {len(splats['means'])} Gaussians")
         
+    elif ckpt_path.exists() and args.resume and not args.render_only:
+        print(f"Resuming from existing checkpoint: {ckpt_path}")
+        checkpoint = torch.load(ckpt_path, map_location=device)
+        splats, optimizers = create_splats_with_optimizers(
+            parser_obj,
+            scene_scale=parser_obj.scene_scale * 1.1,
+            sh_degree=sh_degree,
+            batch_size=args.batch_size,
+            device=device,
+        )
+        splats.load_state_dict(checkpoint["splats"])
+        print(f"✓ Checkpoint loaded: {len(splats['means'])} Gaussians")
+        
     elif ckpt_path.exists() and not args.render_only:
         print(f"Found existing checkpoint: {ckpt_path}")
-        response = input("Use existing checkpoint? (y/n): ")
-        if response.lower() == 'y':
-            checkpoint = torch.load(ckpt_path, map_location=device)
-            splats, optimizers = create_splats_with_optimizers(
-                parser_obj,
-                scene_scale=parser_obj.scene_scale * 1.1,
-                sh_degree=sh_degree,
-                batch_size=args.batch_size,
-                device=device,
-            )
-            splats.load_state_dict(checkpoint["splats"])
-            print(f"✓ Checkpoint loaded: {len(splats['means'])} Gaussians")
-        else:
-            # Train from scratch
+        print("Retraining from scratch (use --resume to load existing checkpoint)")
+        # Train from scratch
             splats, optimizers = create_splats_with_optimizers(
                 parser_obj,
                 scene_scale=parser_obj.scene_scale * 1.1,
