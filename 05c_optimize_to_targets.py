@@ -42,6 +42,8 @@ from PIL import Image
 from tqdm import tqdm
 from rich.console import Console
 
+from project_utils.config import ProjectConfig
+
 console = Console()
 
 sys.path.insert(0, str(Path(__file__).parent / "gsplat-src" / "examples"))
@@ -63,21 +65,22 @@ except ImportError:
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Optimize 3DGS to match targets")
-    parser.add_argument("--ckpt", type=str, required=True, help="Holed checkpoint from 05a")
-    parser.add_argument("--targets_dir", type=str, required=True, help="Targets from 05b")
-    parser.add_argument("--data_root", type=str, required=True, help="Dataset root")
-    parser.add_argument("--output_dir", type=str, default=None, help="Output directory")
-    parser.add_argument("--iters", type=int, default=1000, help="Optimization iterations")
-    parser.add_argument("--lr_means", type=float, default=1.6e-4, help="LR for positions")
-    parser.add_argument("--lr_scales", type=float, default=5e-3, help="LR for scales")
-    parser.add_argument("--lr_quats", type=float, default=1e-3, help="LR for rotations")
-    parser.add_argument("--lr_opacities", type=float, default=5e-2, help="LR for opacities")
-    parser.add_argument("--lr_sh0", type=float, default=2.5e-3, help="LR for SH features")
-    parser.add_argument("--densify_from_iter", type=int, default=100, help="Start densification")
-    parser.add_argument("--densify_until_iter", type=int, default=800, help="Stop densification")
-    parser.add_argument("--densify_grad_thresh", type=float, default=0.0002, help="Densify threshold")
-    parser.add_argument("--factor", type=int, default=4, choices=[1,2,4,8], help="Downsample")
-    parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument("--config", type=str, default="config.yaml", help="Path to config file (default: config.yaml)")
+    parser.add_argument("--ckpt", type=str, default=None, help="Holed checkpoint from 05a (overrides config)")
+    parser.add_argument("--targets_dir", type=str, default=None, help="Targets from 05b (overrides config)")
+    parser.add_argument("--data_root", type=str, default=None, help="Dataset root (overrides config)")
+    parser.add_argument("--output_dir", type=str, default=None, help="Output directory (overrides config)")
+    parser.add_argument("--iters", type=int, default=None, help="Optimization iterations (overrides config)")
+    parser.add_argument("--lr_means", type=float, default=None, help="LR for positions (overrides config)")
+    parser.add_argument("--lr_scales", type=float, default=None, help="LR for scales (overrides config)")
+    parser.add_argument("--lr_quats", type=float, default=None, help="LR for rotations (overrides config)")
+    parser.add_argument("--lr_opacities", type=float, default=None, help="LR for opacities (overrides config)")
+    parser.add_argument("--lr_sh0", type=float, default=None, help="LR for SH features (overrides config)")
+    parser.add_argument("--densify_from_iter", type=int, default=None, help="Start densification (overrides config)")
+    parser.add_argument("--densify_until_iter", type=int, default=None, help="Stop densification (overrides config)")
+    parser.add_argument("--densify_grad_thresh", type=float, default=None, help="Densify threshold (overrides config)")
+    parser.add_argument("--factor", type=int, default=None, choices=[1,2,4,8], help="Downsample (overrides config)")
+    parser.add_argument("--seed", type=int, default=None, help="Random seed (overrides config)")
     parser.add_argument("--device", type=str, default="cuda", help="Device")
     return parser.parse_args()
 
@@ -119,22 +122,39 @@ def load_targets(targets_dir, device):
 
 def main():
     args = parse_args()
+    
+    # Load config
+    config = ProjectConfig(args.config)
+    
+    # Override config with command-line arguments
+    ckpt = args.ckpt if args.ckpt else str(config.get_path('roi') / '05a_holed' / 'ckpt_holed.pt')
+    targets_dir = args.targets_dir if args.targets_dir else str(config.get_path('roi') / '05b_inpainted' / 'targets' / 'train')
+    data_root = args.data_root if args.data_root else str(config.get_path('dataset_root'))
+    output_dir = args.output_dir if args.output_dir else str(config.get_path('roi') / '05c_optimized')
+    iters = args.iters if args.iters is not None else config.config.get('optimization', {}).get('iterations', 1000)
+    lr_means = args.lr_means if args.lr_means is not None else config.config.get('optimization', {}).get('lr_means', 1.6e-4)
+    lr_scales = args.lr_scales if args.lr_scales is not None else config.config.get('optimization', {}).get('lr_scales', 5e-3)
+    lr_quats = args.lr_quats if args.lr_quats is not None else config.config.get('optimization', {}).get('lr_quats', 1e-3)
+    lr_opacities = args.lr_opacities if args.lr_opacities is not None else config.config.get('optimization', {}).get('lr_opacities', 5e-2)
+    lr_sh0 = args.lr_sh0 if args.lr_sh0 is not None else config.config.get('optimization', {}).get('lr_sh0', 2.5e-3)
+    densify_from_iter = args.densify_from_iter if args.densify_from_iter is not None else config.config.get('optimization', {}).get('densify_from_iter', 100)
+    densify_until_iter = args.densify_until_iter if args.densify_until_iter is not None else config.config.get('optimization', {}).get('densify_until_iter', 800)
+    densify_grad_thresh = args.densify_grad_thresh if args.densify_grad_thresh is not None else config.config.get('optimization', {}).get('densify_grad_thresh', 0.0002)
+    factor = args.factor if args.factor is not None else config.config['dataset']['factor']
+    seed = args.seed if args.seed is not None else config.config['dataset']['seed']
+    
     device = torch.device(args.device)
-    set_random_seed(args.seed)
+    set_random_seed(seed)
     
     console.print("\n[bold cyan]" + "="*80 + "[/bold cyan]")
     console.print("[bold cyan]05c - Optimize 3DGS to Match Targets[/bold cyan]")
     console.print("[bold cyan]" + "="*80 + "[/bold cyan]\n")
     
     # Setup paths
-    ckpt_path = Path(args.ckpt)
-    targets_dir = Path(args.targets_dir)
-    data_root = Path(args.data_root)
-    
-    if args.output_dir is None:
-        output_dir = targets_dir.parent / "05c_optimized"
-    else:
-        output_dir = Path(args.output_dir)
+    ckpt_path = Path(ckpt)
+    targets_dir = Path(targets_dir)
+    data_root = Path(data_root)
+    output_dir = Path(output_dir)
     
     renders_dir = output_dir / "renders" / "train"
     renders_dir.mkdir(parents=True, exist_ok=True)
@@ -142,7 +162,7 @@ def main():
     console.print(f"[cyan]Checkpoint:[/cyan] {ckpt_path}")
     console.print(f"[cyan]Targets:[/cyan] {targets_dir}")
     console.print(f"[cyan]Output:[/cyan] {output_dir}")
-    console.print(f"[cyan]Iterations:[/cyan] {args.iters}\n")
+    console.print(f"[cyan]Iterations:[/cyan] {iters}\n")
     
     # Load checkpoint
     console.print("[cyan]Loading holed checkpoint...[/cyan]")
@@ -152,7 +172,7 @@ def main():
     
     # Load dataset
     console.print("[cyan]Loading dataset...[/cyan]")
-    parser = Parser(data_root, factor=args.factor, normalize=True, test_every=8)
+    parser = Parser(data_root, factor=factor, normalize=True, test_every=8)
     dataset = Dataset(parser, split="train")
     console.print(f"[green]✓ Loaded {len(dataset)} training views[/green]")
     
@@ -171,22 +191,22 @@ def main():
     sh0 = torch.nn.Parameter(params["sh0"].clone())
     
     optimizer = torch.optim.Adam([
-        {"params": [means], "lr": args.lr_means, "name": "means"},
-        {"params": [quats], "lr": args.lr_quats, "name": "quats"},
-        {"params": [scales], "lr": args.lr_scales, "name": "scales"},
-        {"params": [opacities], "lr": args.lr_opacities, "name": "opacities"},
-        {"params": [sh0], "lr": args.lr_sh0, "name": "sh0"},
+        {"params": [means], "lr": lr_means, "name": "means"},
+        {"params": [quats], "lr": lr_quats, "name": "quats"},
+        {"params": [scales], "lr": lr_scales, "name": "scales"},
+        {"params": [opacities], "lr": lr_opacities, "name": "opacities"},
+        {"params": [sh0], "lr": lr_sh0, "name": "sh0"},
     ])
     
     # Setup densification strategy
     strategy = DefaultStrategy(
         prune_opa=0.005,
-        grow_grad2d=args.densify_grad_thresh,
+        grow_grad2d=densify_grad_thresh,
         grow_scale3d=0.01,
         grow_scale2d=0.01,
         prune_scale3d=0.1,
         prune_scale2d=0.15,
-        refine_scale2d_stop_iter=args.densify_until_iter,
+        refine_scale2d_stop_iter=densify_until_iter,
         reset_every=3000,
         refine_every=100,
     )
@@ -197,7 +217,7 @@ def main():
     console.print("\n[yellow]Optimizing...[/yellow]")
     losses = []
     
-    for iter_idx in tqdm(range(args.iters), desc="Training"):
+    for iter_idx in tqdm(range(iters), desc="Training"):
         # Random view
         idx = torch.randint(0, len(dataset), (1,)).item()
         data = dataset[idx]
@@ -229,7 +249,7 @@ def main():
         loss.backward()
         
         # Store gradients for densification
-        if args.densify_from_iter <= iter_idx < args.densify_until_iter:
+        if densify_from_iter <= iter_idx < densify_until_iter:
             if info["means2d"].grad is not None:
                 strategy_state = strategy.collect_statistics(
                     iter=iter_idx,
@@ -242,7 +262,7 @@ def main():
         losses.append(loss.item())
         
         # Densification
-        if args.densify_from_iter <= iter_idx < args.densify_until_iter:
+        if densify_from_iter <= iter_idx < densify_until_iter:
             if iter_idx % 100 == 0:
                 n_before = len(means)
                 
@@ -327,22 +347,23 @@ def main():
     manifest = {
         "module": "05c_optimize_to_targets",
         "timestamp": datetime.now().isoformat(),
+        "config_file": args.config,
         "inputs": {
             "checkpoint": str(ckpt_path),
             "targets_dir": str(targets_dir),
             "data_root": str(data_root),
         },
         "parameters": {
-            "iters": args.iters,
-            "lr_means": args.lr_means,
-            "lr_scales": args.lr_scales,
-            "lr_quats": args.lr_quats,
-            "lr_opacities": args.lr_opacities,
-            "lr_sh0": args.lr_sh0,
-            "densify_from_iter": args.densify_from_iter,
-            "densify_until_iter": args.densify_until_iter,
-            "factor": args.factor,
-            "seed": args.seed,
+            "iters": iters,
+            "lr_means": lr_means,
+            "lr_scales": lr_scales,
+            "lr_quats": lr_quats,
+            "lr_opacities": lr_opacities,
+            "lr_sh0": lr_sh0,
+            "densify_from_iter": densify_from_iter,
+            "densify_until_iter": densify_until_iter,
+            "factor": factor,
+            "seed": seed,
         },
         "results": {
             "n_views": len(dataset),
@@ -353,8 +374,8 @@ def main():
         },
     }
     
-    with open(output_dir / "manifest.json", "w") as f:
-        json.dump(manifest, f, indent=2)
+    config.save_manifest("05c_optimize_to_targets", manifest)
+    console.print(f"\n[green]✓ Saved manifest to {config.get_path('logs') / '05c_optimize_to_targets_manifest.json'}[/green]")
     
     console.print("\n[bold green]" + "="*80 + "[/bold green]")
     console.print("[bold green]✓ Module 05c Complete![/bold green]")
