@@ -62,7 +62,7 @@ source activate.sh
 - Uses: GroundingDINO + SAM2
 - Output: `sam_masks/*.png`
 
-**04_lift_masks_to_roi3d.py** - Create 3D ROI
+**04a_lift_masks_to_roi3d.py** - Create 3D ROI
 - Input: Checkpoint, masks, poses
 - Output: `roi.pt` (per-Gaussian weights)
 
@@ -137,7 +137,7 @@ python 00_check_dataset.py --data_root datasets/360_v2/garden
 python 01_train_gs_initial.py --data_root datasets/360_v2/garden --iters 30000
 python 02_render_training_views.py --ckpt outputs/garden/01_gs_base/ckpt_initial.pt
 python 03_ground_text_to_masks.py --images_root outputs/garden/round_001/pre_edit --text "brown plant"
-python 04_lift_masks_to_roi3d.py --ckpt outputs/garden/01_gs_base/ckpt_initial.pt --masks_root outputs/garden/round_001/masks/sam_masks
+python 04a_lift_masks_to_roi3d.py --ckpt outputs/garden/01_gs_base/ckpt_initial.pt --masks_root outputs/garden/round_001/masks/sam_masks
 python 05_remove_and_patch.py --ckpt_in outputs/garden/01_gs_base/ckpt_initial.pt --roi outputs/garden/round_001/roi.pt
 ```
 
