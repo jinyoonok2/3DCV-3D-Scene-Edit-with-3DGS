@@ -35,19 +35,22 @@ from PIL import Image
 from tqdm import tqdm
 from rich.console import Console
 
+from project_utils.config import ProjectConfig
+
 console = Console()
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Inpaint holes with SDXL")
-    parser.add_argument("--holed_dir", type=str, required=True, help="Directory from 05a")
-    parser.add_argument("--output_dir", type=str, default=None, help="Output directory")
-    parser.add_argument("--prompt", type=str, default="natural outdoor scene, grass, plants", help="Prompt")
-    parser.add_argument("--negative_prompt", type=str, default="blurry, distorted, artifacts", help="Negative prompt")
-    parser.add_argument("--strength", type=float, default=0.99, help="Denoising strength")
-    parser.add_argument("--guidance_scale", type=float, default=7.5, help="CFG scale")
-    parser.add_argument("--num_steps", type=int, default=50, help="Denoising steps")
-    parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument("--config", type=str, default="config.yaml", help="Path to config file (default: config.yaml)")
+    parser.add_argument("--holed_dir", type=str, default=None, help="Directory from 05a (overrides config)")
+    parser.add_argument("--output_dir", type=str, default=None, help="Output directory (overrides config)")
+    parser.add_argument("--prompt", type=str, default=None, help="Prompt (overrides config)")
+    parser.add_argument("--negative_prompt", type=str, default=None, help="Negative prompt (overrides config)")
+    parser.add_argument("--strength", type=float, default=None, help="Denoising strength (overrides config)")
+    parser.add_argument("--guidance_scale", type=float, default=None, help="CFG scale (overrides config)")
+    parser.add_argument("--num_steps", type=int, default=None, help="Denoising steps (overrides config)")
+    parser.add_argument("--seed", type=int, default=None, help="Random seed (overrides config)")
     parser.add_argument("--device", type=str, default="cuda", help="Device")
     return parser.parse_args()
 
@@ -94,6 +97,20 @@ def inpaint_view(pipe, image_path, mask_path, prompt, negative_prompt, strength,
 
 def main():
     args = parse_args()
+    
+    # Load config
+    config = ProjectConfig(args.config)
+    
+    # Override config with command-line arguments
+    holed_dir = args.holed_dir if args.holed_dir else str(config.get_path('roi') / '05a_holed')
+    output_dir = args.output_dir if args.output_dir else str(config.get_path('roi') / '05b_inpainted')
+    prompt = args.prompt if args.prompt else config.config.get('inpainting', {}).get('prompt', 'natural outdoor scene, grass, plants')
+    negative_prompt = args.negative_prompt if args.negative_prompt else config.config.get('inpainting', {}).get('negative_prompt', 'blurry, distorted, artifacts')
+    strength = args.strength if args.strength is not None else config.config.get('inpainting', {}).get('strength', 0.99)
+    guidance_scale = args.guidance_scale if args.guidance_scale is not None else config.config.get('inpainting', {}).get('guidance_scale', 7.5)
+    num_steps = args.num_steps if args.num_steps is not None else config.config.get('inpainting', {}).get('num_steps', 50)
+    seed = args.seed if args.seed is not None else config.config['dataset']['seed']
+    
     device = torch.device(args.device)
     
     console.print("\n[bold cyan]" + "="*80 + "[/bold cyan]")
@@ -101,7 +118,7 @@ def main():
     console.print("[bold cyan]" + "="*80 + "[/bold cyan]\n")
     
     # Setup paths
-    holed_dir = Path(args.holed_dir)
+    holed_dir = Path(holed_dir)
     renders_dir = holed_dir / "renders" / "train"
     masks_dir = holed_dir / "masks" / "train"
     
@@ -110,18 +127,14 @@ def main():
         console.print(f"[red]Make sure to run 05a first![/red]")
         sys.exit(1)
     
-    if args.output_dir is None:
-        output_dir = holed_dir.parent / "05b_inpainted"
-    else:
-        output_dir = Path(args.output_dir)
-    
+    output_dir = Path(output_dir)
     targets_dir = output_dir / "targets" / "train"
     targets_dir.mkdir(parents=True, exist_ok=True)
     
     console.print(f"[cyan]Input directory:[/cyan] {holed_dir}")
     console.print(f"[cyan]Output directory:[/cyan] {output_dir}")
-    console.print(f"[cyan]Prompt:[/cyan] {args.prompt}")
-    console.print(f"[cyan]Strength:[/cyan] {args.strength}\n")
+    console.print(f"[cyan]Prompt:[/cyan] {prompt}")
+    console.print(f"[cyan]Strength:[/cyan] {strength}\n")
     
     # Get image list
     image_files = sorted(renders_dir.glob("*.png"))
@@ -147,12 +160,12 @@ def main():
             pipe=pipe,
             image_path=img_path,
             mask_path=mask_path,
-            prompt=args.prompt,
-            negative_prompt=args.negative_prompt,
-            strength=args.strength,
-            guidance_scale=args.guidance_scale,
-            num_steps=args.num_steps,
-            seed=args.seed + int(idx),  # Different seed per view
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            strength=strength,
+            guidance_scale=guidance_scale,
+            num_steps=num_steps,
+            seed=seed + int(idx),  # Different seed per view
         )
         
         # Save
@@ -164,24 +177,25 @@ def main():
     manifest = {
         "module": "05b_inpaint_holes",
         "timestamp": datetime.now().isoformat(),
+        "config_file": args.config,
         "inputs": {
             "holed_dir": str(holed_dir),
         },
         "parameters": {
-            "prompt": args.prompt,
-            "negative_prompt": args.negative_prompt,
-            "strength": args.strength,
-            "guidance_scale": args.guidance_scale,
-            "num_steps": args.num_steps,
-            "seed": args.seed,
+            "prompt": prompt,
+            "negative_prompt": negative_prompt,
+            "strength": strength,
+            "guidance_scale": guidance_scale,
+            "num_steps": num_steps,
+            "seed": seed,
         },
         "results": {
             "n_inpainted": n_images,
         },
     }
     
-    with open(output_dir / "manifest.json", "w") as f:
-        json.dump(manifest, f, indent=2)
+    config.save_manifest("05b_inpaint_holes", manifest)
+    console.print(f"\n[green]✓ Saved manifest to {config.get_path('logs') / '05b_inpaint_holes_manifest.json'}[/green]")
     
     console.print("\n[bold green]✓ Module 05b Complete![/bold green]")
     console.print(f"[bold green]Next: Run 05c to optimize 3DGS to match targets[/bold green]\n")
