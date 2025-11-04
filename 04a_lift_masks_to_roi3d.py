@@ -394,6 +394,8 @@ def main():
     seed = args.seed if hasattr(args, 'seed') and args.seed is not None else config.config['dataset']['seed']
     factor = args.factor if hasattr(args, 'factor') and args.factor is not None else config.config['dataset']['factor']
     test_every = args.test_every if hasattr(args, 'test_every') and args.test_every is not None else config.config['dataset']['test_every']
+    sh_degree = args.sh_degree if hasattr(args, 'sh_degree') and args.sh_degree is not None else config.config['training']['sh_degree']
+    min_views = args.min_views if hasattr(args, 'min_views') and args.min_views is not None else config.config['roi'].get('min_views', 3)
     
     set_random_seed(seed)
     
@@ -429,12 +431,12 @@ def main():
     print()
     
     # Load checkpoint
-    splats = load_checkpoint(args.ckpt, device=device)
+    splats = load_checkpoint(ckpt, device=device)
     num_gaussians = splats["means"].shape[0]
     
     # Load masks
     image_names = [f"view_{i:03d}" for i in range(len(dataset))]
-    masks = load_masks(args.masks_root, image_names)
+    masks = load_masks(masks_root, image_names)
     print()
     
     if len(masks) == 0:
@@ -443,17 +445,17 @@ def main():
     
     # Compute ROI weights
     roi_weights = compute_roi_weights_voting(
-        splats, dataset, masks, sh_degree=args.sh_degree, device=device
+        splats, dataset, masks, sh_degree=sh_degree, device=device
     )
     print()
     
     # Apply threshold for binary ROI
-    roi_binary = apply_threshold(roi_weights, args.roi_thresh)
+    roi_binary = apply_threshold(roi_weights, roi_thresh)
     num_roi_gaussians = roi_binary.sum().item()
     sparsity = (num_roi_gaussians / num_gaussians) * 100
     
     print(f"Binary ROI:")
-    print(f"  Threshold: {args.roi_thresh}")
+    print(f"  Threshold: {roi_thresh}")
     print(f"  ROI Gaussians: {num_roi_gaussians:,} / {num_gaussians:,} ({sparsity:.2f}%)")
     print()
     
@@ -491,16 +493,17 @@ def main():
     manifest = {
         "module": "04_lift_masks_to_roi3d",
         "timestamp": datetime.now().isoformat(),
+        "config_file": args.config,
         "inputs": {
-            "checkpoint": str(args.ckpt),
-            "masks_root": str(args.masks_root),
-            "data_root": str(args.data_root),
+            "checkpoint": str(ckpt),
+            "masks_root": str(masks_root),
+            "data_root": str(data_root),
         },
         "parameters": {
-            "roi_thresh": args.roi_thresh,
-            "min_views": args.min_views,
-            "sh_degree": args.sh_degree,
-            "seed": args.seed,
+            "roi_thresh": roi_thresh,
+            "min_views": min_views,
+            "sh_degree": sh_degree,
+            "seed": seed,
         },
         "outputs": {
             "roi_weights": str(output_dir / "roi.pt"),
@@ -510,10 +513,8 @@ def main():
         "metrics": metrics,
     }
     
-    with open(output_dir / "manifest.json", "w") as f:
-        json.dump(manifest, f, indent=2)
-    
-    print(f"✓ Saved manifest to {output_dir / 'manifest.json'}")
+    config.save_manifest("04_lift_masks_to_roi3d", manifest)
+    print(f"✓ Saved manifest to {config.get_path('logs') / '04_lift_masks_to_roi3d_manifest.json'}")
     print()
     print("=" * 80)
     print("ROI LIFTING COMPLETE")
@@ -522,7 +523,7 @@ def main():
     print(f"✓ Binary ROI: {output_dir / 'roi_binary.pt'}")
     print()
     print(f"Next steps:")
-    print(f"  1. Visualize ROI: python 04b_visualize_roi.py --roi {output_dir / 'roi.pt'} --ckpt {args.ckpt} --data_root {args.data_root} --masks_root {args.masks_root}/sam_masks")
+    print(f"  1. Visualize ROI: python 04b_visualize_roi.py --roi {output_dir / 'roi.pt'} --ckpt {ckpt} --data_root {data_root} --masks_root {masks_root}")
     print(f"  2. Create edited targets: python 05_ip2p_edit_targets.py ...")
     print(f"  3. ROI-gated optimization: python 06_optimize_with_roi.py ...")
     print("=" * 80)
