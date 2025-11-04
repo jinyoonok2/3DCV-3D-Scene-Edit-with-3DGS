@@ -57,38 +57,47 @@ except ImportError:
     print("ERROR: gsplat not installed. Run: pip install gsplat")
     sys.exit(1)
 
+# Import project config
+from project_utils.config import ProjectConfig
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Lift 2D masks to 3D ROI weights")
     parser.add_argument(
+        "--config",
+        type=str,
+        default="config.yaml",
+        help="Path to config file (default: config.yaml)",
+    )
+    parser.add_argument(
         "--ckpt",
         type=str,
-        required=True,
-        help="Path to 3DGS checkpoint",
+        default=None,
+        help="Path to 3DGS checkpoint (overrides config)",
     )
     parser.add_argument(
         "--masks_root",
         type=str,
-        required=True,
-        help="Directory containing 2D masks (PNG or NPY)",
+        default=None,
+        help="Directory containing 2D masks (overrides config)",
     )
     parser.add_argument(
         "--data_root",
         type=str,
-        required=True,
-        help="Dataset root for camera poses",
+        default=None,
+        help="Dataset root for camera poses (overrides config)",
     )
     parser.add_argument(
         "--output_dir",
         type=str,
         default=None,
-        help="Output directory (default: inferred from masks_root)",
+        help="Output directory (overrides config)",
     )
     parser.add_argument(
         "--roi_thresh",
         type=float,
-        default=0.5,
-        help="Threshold for binary ROI (0-1)",
+        default=None,
+        help="Threshold for binary ROI (overrides config)",
     )
     parser.add_argument(
         "--min_views",
@@ -372,19 +381,26 @@ def apply_threshold(roi_weights, threshold, min_views_count=None):
 
 def main():
     args = parse_args()
-    set_random_seed(args.seed)
+    
+    # Load config
+    config = ProjectConfig(args.config)
+    
+    # Override config with command-line arguments
+    ckpt = args.ckpt if args.ckpt else str(config.get_checkpoint_path('initial'))
+    masks_root = args.masks_root if args.masks_root else str(config.get_path('masks') / 'sam_masks')
+    data_root = args.data_root if args.data_root else str(config.get_path('dataset_root'))
+    output_dir = args.output_dir if args.output_dir else str(config.get_path('roi'))
+    roi_thresh = args.roi_thresh if args.roi_thresh is not None else config.config['roi']['threshold']
+    seed = args.seed if hasattr(args, 'seed') and args.seed is not None else config.config['dataset']['seed']
+    factor = args.factor if hasattr(args, 'factor') and args.factor is not None else config.config['dataset']['factor']
+    test_every = args.test_every if hasattr(args, 'test_every') and args.test_every is not None else config.config['dataset']['test_every']
+    
+    set_random_seed(seed)
     
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
     
-    # Setup output directory
-    if args.output_dir is None:
-        masks_path = Path(args.masks_root)
-        # Navigate up to round directory
-        round_dir = masks_path.parent
-        args.output_dir = round_dir / "roi"
-    
-    output_dir = Path(args.output_dir)
+    output_dir = Path(output_dir)
     proj_masks_dir = output_dir / "proj_masks"
     output_dir.mkdir(parents=True, exist_ok=True)
     proj_masks_dir.mkdir(exist_ok=True)
@@ -392,20 +408,21 @@ def main():
     print("=" * 80)
     print("Lift 2D Masks to 3D ROI")
     print("=" * 80)
-    print(f"Checkpoint: {args.ckpt}")
-    print(f"Masks root: {args.masks_root}")
-    print(f"Data root: {args.data_root}")
+    print(f"Config: {args.config}")
+    print(f"Checkpoint: {ckpt}")
+    print(f"Masks root: {masks_root}")
+    print(f"Data root: {data_root}")
     print(f"Output dir: {output_dir}")
-    print(f"ROI threshold: {args.roi_thresh}")
+    print(f"ROI threshold: {roi_thresh}")
     print()
     
     # Load dataset
-    print(f"Loading dataset from {args.data_root}...")
+    print(f"Loading dataset from {data_root}...")
     parser = Parser(
-        data_dir=Path(args.data_root),
-        factor=args.factor,
+        data_dir=Path(data_root),
+        factor=factor,
         normalize=True,
-        test_every=args.test_every,
+        test_every=test_every,
     )
     dataset = Dataset(parser, split="train")
     print(f"✓ Loaded {len(dataset)} training views")

@@ -34,6 +34,9 @@ import torch
 from PIL import Image
 from tqdm import tqdm
 
+# Import project config
+from project_utils.config import ProjectConfig
+
 # Check for required packages
 try:
     from groundingdino.util.inference import load_model, load_image, predict
@@ -74,28 +77,34 @@ if not GROUNDING_DINO_AVAILABLE or not SAM2_AVAILABLE:
 def parse_args():
     parser = argparse.ArgumentParser(description="Generate masks from text using GroundingDINO + SAM2")
     parser.add_argument(
+        "--config",
+        type=str,
+        default="config.yaml",
+        help="Path to config file (default: config.yaml)",
+    )
+    parser.add_argument(
         "--images_root",
         type=str,
-        required=True,
-        help="Path to directory containing rendered images",
+        default=None,
+        help="Path to directory containing rendered images (overrides config)",
     )
     parser.add_argument(
         "--text",
         type=str,
-        required=True,
-        help="Text prompt for object detection (use . to separate synonyms)",
+        default=None,
+        help="Text prompt for object detection (overrides config)",
     )
     parser.add_argument(
         "--output_dir",
         type=str,
         default=None,
-        help="Output directory for masks",
+        help="Output directory for masks (overrides config)",
     )
     parser.add_argument(
         "--dino_thresh",
         type=float,
-        default=0.25,
-        help="GroundingDINO detection threshold (lower=more detections, try 0.20-0.30)",
+        default=None,
+        help="GroundingDINO detection threshold (overrides config)",
     )
     parser.add_argument(
         "--box_thresh",
@@ -570,21 +579,20 @@ def visualize_overlay(image, mask, output_path, all_masks=None, selected_idx=Non
 def main():
     args = parse_args()
     
+    # Load config
+    config = ProjectConfig(args.config)
+    
+    # Override config with command-line arguments
+    images_root = args.images_root if args.images_root else str(config.get_path('renders') / 'train')
+    text = args.text if args.text else config.config['segmentation']['text_prompt']
+    output_dir = args.output_dir if args.output_dir else str(config.get_path('masks'))
+    dino_thresh = args.dino_thresh if args.dino_thresh is not None else config.config['segmentation']['dino_threshold']
+    
     # Setup device
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
     
-    # Determine output directory
-    if args.output_dir is None:
-        # Try to infer from images_root structure
-        images_path = Path(args.images_root)
-        if "round_" in str(images_path):
-            round_dir = images_path.parent.parent
-            args.output_dir = round_dir / "masks"
-        else:
-            args.output_dir = images_path.parent / "masks"
-    
-    output_dir = Path(args.output_dir)
+    output_dir = Path(output_dir)
     boxes_dir = output_dir / "boxes"
     masks_dir = output_dir / "sam_masks"
     overlays_dir = output_dir / "overlays"
@@ -596,10 +604,11 @@ def main():
     print("=" * 80)
     print("Text-to-Masks Generation")
     print("=" * 80)
-    print(f"Images root: {args.images_root}")
-    print(f"Text prompt: {args.text}")
+    print(f"Config: {args.config}")
+    print(f"Images root: {images_root}")
+    print(f"Text prompt: {text}")
     print(f"Output directory: {output_dir}")
-    print(f"DINO threshold: {args.dino_thresh}")
+    print(f"DINO threshold: {dino_thresh}")
     print(f"SAM2 model: {args.sam_model}")
     print()
     
@@ -629,11 +638,11 @@ def main():
     print()
     
     # Get list of images
-    images_root = Path(args.images_root)
-    image_files = sorted(images_root.glob("*.png")) + sorted(images_root.glob("*.jpg"))
+    images_root_path = Path(images_root)
+    image_files = sorted(images_root_path.glob("*.png")) + sorted(images_root_path.glob("*.jpg"))
     
     if len(image_files) == 0:
-        print(f"ERROR: No images found in {images_root}")
+        print(f"ERROR: No images found in {images_root_path}")
         sys.exit(1)
     
     print(f"Processing {len(image_files)} images...")
@@ -689,10 +698,10 @@ def main():
             # Detect objects with GroundingDINO
             image_np, boxes, logits, phrases = detect_objects(
                 img_path,
-                args.text,
+                text,
                 dino_model,
                 args.box_thresh,
-                args.dino_thresh,
+                dino_thresh,
             )
             
             # Keep original boxes for visualization
@@ -911,11 +920,12 @@ def main():
     manifest = {
         "module": "03_ground_text_to_masks",
         "timestamp": datetime.now().isoformat(),
-        "images_root": str(args.images_root),
+        "config_file": args.config,
+        "images_root": str(images_root),
         "output_dir": str(output_dir),
         "parameters": {
-            "text_prompt": args.text,
-            "dino_thresh": args.dino_thresh,
+            "text_prompt": text,
+            "dino_thresh": dino_thresh,
             "box_thresh": args.box_thresh,
             "sam_model": args.sam_model,
             "seed": args.seed,
@@ -944,9 +954,7 @@ def main():
         },
     }
     
-    manifest_path = output_dir / "manifest.json"
-    with open(manifest_path, "w") as f:
-        json.dump(manifest, f, indent=2)
+    config.save_manifest("03_ground_text_to_masks", manifest)
     
     print(f"Manifest saved to: {manifest_path}")
     print()
