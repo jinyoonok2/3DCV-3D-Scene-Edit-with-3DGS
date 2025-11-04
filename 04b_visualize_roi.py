@@ -39,6 +39,8 @@ import torch
 from PIL import Image
 from tqdm import tqdm
 
+from project_utils.config import ProjectConfig
+
 # Add gsplat examples to path
 sys.path.insert(0, str(Path(__file__).parent / "gsplat-src" / "examples"))
 
@@ -60,58 +62,64 @@ except ImportError:
 def parse_args():
     parser = argparse.ArgumentParser(description="Visualize ROI by rendering full scene")
     parser.add_argument(
+        "--config",
+        type=str,
+        default="config.yaml",
+        help="Path to config file (default: config.yaml)",
+    )
+    parser.add_argument(
         "--roi",
         type=str,
-        required=True,
-        help="Path to ROI weights tensor (roi.pt)",
+        default=None,
+        help="Path to ROI weights tensor (roi.pt) (overrides config)",
     )
     parser.add_argument(
         "--ckpt",
         type=str,
-        required=True,
-        help="Path to 3DGS checkpoint",
+        default=None,
+        help="Path to 3DGS checkpoint (overrides config)",
     )
     parser.add_argument(
         "--masks_root",
         type=str,
-        required=True,
-        help="Directory containing 2D masks for IoU comparison",
+        default=None,
+        help="Directory containing 2D masks for IoU comparison (overrides config)",
     )
     parser.add_argument(
         "--data_root",
         type=str,
-        required=True,
-        help="Dataset root for camera poses",
+        default=None,
+        help="Dataset root for camera poses (overrides config)",
     )
     parser.add_argument(
         "--output_dir",
         type=str,
         default=None,
-        help="Output directory (default: same as roi.pt directory)",
+        help="Output directory (overrides config)",
     )
     parser.add_argument(
         "--num_views",
         type=int,
-        default=10,
-        help="Number of views to visualize",
+        default=None,
+        help="Number of views to visualize (overrides config)",
     )
     parser.add_argument(
         "--factor",
         type=int,
-        default=4,
-        help="Dataset downsampling factor",
+        default=None,
+        help="Dataset downsampling factor (overrides config)",
     )
     parser.add_argument(
         "--test_every",
         type=int,
-        default=8,
-        help="Test split frequency",
+        default=None,
+        help="Test split frequency (overrides config)",
     )
     parser.add_argument(
         "--sh_degree",
         type=int,
-        default=3,
-        help="Spherical harmonics degree",
+        default=None,
+        help="Spherical harmonics degree (overrides config)",
     )
     return parser.parse_args()
 
@@ -274,6 +282,21 @@ def compute_iou(mask1, mask2):
 
 def main():
     args = parse_args()
+    
+    # Load config
+    config = ProjectConfig(args.config)
+    
+    # Override config with command-line arguments
+    roi_path = args.roi if args.roi else str(config.get_path('roi') / 'roi.pt')
+    ckpt = args.ckpt if args.ckpt else str(config.get_checkpoint_path('initial'))
+    masks_root = args.masks_root if args.masks_root else str(config.get_path('masks') / 'sam_masks')
+    data_root = args.data_root if args.data_root else str(config.get_path('dataset_root'))
+    output_dir = args.output_dir if args.output_dir else str(config.get_path('roi'))
+    num_views = args.num_views if args.num_views is not None else 10
+    factor = args.factor if args.factor is not None else config.config['dataset']['factor']
+    test_every = args.test_every if args.test_every is not None else config.config['dataset']['test_every']
+    sh_degree = args.sh_degree if args.sh_degree is not None else config.config['training']['sh_degree']
+    
     device = "cuda" if torch.cuda.is_available() else "cpu"
     
     print("=" * 80)
@@ -282,11 +305,8 @@ def main():
     print()
     
     # Setup output directory
-    roi_path = Path(args.roi)
-    if args.output_dir:
-        output_dir = Path(args.output_dir)
-    else:
-        output_dir = roi_path.parent
+    roi_path = Path(roi_path)
+    output_dir = Path(output_dir)
     
     proj_masks_dir = output_dir / "proj_masks"
     proj_masks_dir.mkdir(parents=True, exist_ok=True)
@@ -305,28 +325,28 @@ def main():
     print()
     
     # Load dataset
-    print(f"Loading dataset from {args.data_root}...")
+    print(f"Loading dataset from {data_root}...")
     parser = Parser(
-        data_dir=Path(args.data_root),
-        factor=args.factor,
+        data_dir=Path(data_root),
+        factor=factor,
         normalize=True,
-        test_every=args.test_every,
+        test_every=test_every,
     )
     dataset = Dataset(parser, split="train")
     print(f"✓ Loaded {len(dataset)} training views")
     print()
     
     # Load checkpoint
-    splats = load_checkpoint(args.ckpt, device=device)
+    splats = load_checkpoint(ckpt, device=device)
     print()
     
     # Load masks
     image_names = [f"view_{i:03d}" for i in range(len(dataset))]
-    masks = load_masks(args.masks_root, image_names)
+    masks = load_masks(masks_root, image_names)
     print()
     
     # Limit number of views
-    num_views_to_render = min(args.num_views, len(dataset))
+    num_views_to_render = min(num_views, len(dataset))
     dataset_subset = torch.utils.data.Subset(dataset, range(num_views_to_render))
     
     print(f"Rendering {num_views_to_render} views...")
@@ -334,7 +354,7 @@ def main():
     
     # Project ROI to 2D
     projected_masks = project_roi_to_masks(
-        splats, roi_weights, dataset_subset, args.sh_degree, device
+        splats, roi_weights, dataset_subset, sh_degree, device
     )
     print()
     
