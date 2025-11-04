@@ -391,11 +391,11 @@ def main():
     data_root = args.data_root if args.data_root else str(config.get_path('dataset_root'))
     output_dir = args.output_dir if args.output_dir else str(config.get_path('roi'))
     roi_thresh = args.roi_thresh if args.roi_thresh is not None else config.config['roi']['threshold']
-    seed = args.seed if hasattr(args, 'seed') and args.seed is not None else config.config['dataset']['seed']
-    factor = args.factor if hasattr(args, 'factor') and args.factor is not None else config.config['dataset']['factor']
-    test_every = args.test_every if hasattr(args, 'test_every') and args.test_every is not None else config.config['dataset']['test_every']
-    sh_degree = args.sh_degree if hasattr(args, 'sh_degree') and args.sh_degree is not None else config.config['training']['sh_degree']
-    min_views = args.min_views if hasattr(args, 'min_views') and args.min_views is not None else config.config['roi'].get('min_views', 3)
+    seed = args.seed if args.seed is not None else config.config['dataset']['seed']
+    factor = args.factor if args.factor is not None else config.config['dataset']['factor']
+    test_every = args.test_every if args.test_every is not None else config.config['dataset']['test_every']
+    sh_degree = args.sh_degree if args.sh_degree is not None else config.config['training']['sh_degree']
+    min_views = args.min_views if args.min_views is not None else config.config['roi'].get('min_views', 3)
     
     set_random_seed(seed)
     

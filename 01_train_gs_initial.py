@@ -425,8 +425,8 @@ def main():
     seed = args.seed if args.seed is not None else config.config['dataset']['seed']
     factor = args.factor if args.factor is not None else config.config['dataset']['factor']
     test_every = args.test_every if args.test_every is not None else config.config['dataset']['test_every']
-    sh_degree = args.sh_degree if hasattr(args, 'sh_degree') and args.sh_degree is not None else config.config['training']['sh_degree']
-    ssim_lambda = args.ssim_lambda  # Uses argparse default of 0.2
+    sh_degree = args.sh_degree if args.sh_degree is not None else config.config['training']['sh_degree']
+    ssim_lambda = args.ssim_lambda  # Argparse default: 0.2
     
     set_random_seed(seed)
     
