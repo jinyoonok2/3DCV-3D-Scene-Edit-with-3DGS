@@ -176,8 +176,8 @@ def main():
     dataset = Dataset(parser, split="train")
     console.print(f"[green]✓ Loaded {len(dataset)} training views[/green]")
     
-    # Render holed scene
-    console.print("\n[yellow]Rendering holed scene...[/yellow]")
+    # Render holed scene and create hole masks
+    console.print("\n[yellow]Rendering holed scene and computing hole masks...[/yellow]")
     
     for idx in tqdm(range(len(dataset)), desc="Rendering"):
         data = dataset[idx]
@@ -190,8 +190,23 @@ def main():
         K = data["K"].to(device)
         worldtoview = torch.inverse(camtoworld)
         
-        # Render
-        render, alpha, _ = render_view(
+        # Render ORIGINAL scene (before deletion)
+        render_orig, alpha_orig, _ = render_view(
+            means=params["means"],
+            quats=params["quats"],
+            scales=params["scales"],
+            opacities=params["opacities"],
+            sh0=params["sh0"],
+            shN=params["shN"],
+            viewmat=worldtoview,
+            K=K,
+            width=width,
+            height=height,
+            sh_degree=3,
+        )
+        
+        # Render HOLED scene (after deletion)
+        render_holed, alpha_holed, _ = render_view(
             means=params_holed["means"],
             quats=params_holed["quats"],
             scales=params_holed["scales"],
@@ -205,11 +220,13 @@ def main():
             sh_degree=3,
         )
         
-        # Create hole mask (low alpha = hole)
-        mask = (alpha < 0.5).float()
+        # Create hole mask by comparing alpha channels
+        # Hole = where original had content but holed doesn't
+        alpha_diff = alpha_orig - alpha_holed
+        mask = (alpha_diff > 0.1).float()  # Significant alpha drop = hole
         
-        # Save render
-        img_np = (render.cpu().numpy() * 255).astype(np.uint8)
+        # Save render and mask
+        img_np = (render_holed.cpu().numpy() * 255).astype(np.uint8)
         mask_np = (mask.cpu().numpy() * 255).astype(np.uint8)
         
         cv2.imwrite(str(renders_dir / f"{idx:05d}.png"), cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR))
