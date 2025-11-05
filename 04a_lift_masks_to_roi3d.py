@@ -372,7 +372,7 @@ def compute_roi_weights_voting(splats, dataset, masks, sh_degree=3, device="cuda
             # Use ABSOLUTE depth tolerance (in scene units) for robust volumetric selection
             # This captures a thick shell regardless of object distance from camera
             depth_diff = torch.abs(gaussian_depths_valid - rendered_depths)
-            depth_tolerance = 0.2  # Select Gaussians within 0.2 scene units of surface
+            depth_tolerance = 0.5  # Select Gaussians within 0.5 scene units of surface (aggressive)
             is_visible = depth_diff < depth_tolerance
             
             visible_indices = valid_indices[is_visible]
