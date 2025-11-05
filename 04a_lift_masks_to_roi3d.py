@@ -374,7 +374,7 @@ def compute_roi_weights_voting(splats, dataset, masks, sh_degree=3, device="cuda
             # 04b visualization is misleading: outer shell occludes inner core, looks solid
             # But inner core has roi_weight=0 and remains after deletion, breaking masks!
             depth_diff = torch.abs(gaussian_depths_valid - rendered_depths)
-            depth_tolerance = 0.3  # Select Gaussians within 0.3 scene units of surface
+            depth_tolerance = 0.5  # Select Gaussians within 0.5 scene units of surface
             is_visible = depth_diff < depth_tolerance
             
             visible_indices = valid_indices[is_visible]
