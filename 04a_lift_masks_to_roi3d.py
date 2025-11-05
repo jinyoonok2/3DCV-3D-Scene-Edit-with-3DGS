@@ -328,7 +328,7 @@ def compute_roi_weights_voting(splats, dataset, masks, sh_degree=3, device="cuda
                 width=width,
                 height=height,
                 sh_degree=sh_degree,
-                packed=False,
+                packed=True,  # CRITICAL: Use packed mode to save memory!
                 render_mode="D",  # Render depth only
             )
             depth_map = renders_depth[0, :, :, 0]  # [H, W]
