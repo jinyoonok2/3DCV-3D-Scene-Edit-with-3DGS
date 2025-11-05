@@ -254,11 +254,15 @@ def rasterize_gaussians_with_ids(splats, camtoworlds, Ks, width, height, sh_degr
 
 def compute_roi_weights_voting(splats, dataset, masks, sh_degree=3, device="cuda"):
     """
-    Compute ROI weights by voting: for each Gaussian, accumulate mask values
-    from all views where it's visible.
+    Compute ROI weights using render-based voting with occlusion handling.
     
-    Approach: Rasterize each view, for each pixel with mask > 0, increment
-    the vote for contributing Gaussians.
+    For each view with a mask:
+    1. Render depth map to get visible surface
+    2. Project Gaussians to 2D
+    3. Only count Gaussians whose depth matches rendered depth (they're visible)
+    4. Accumulate mask values for visible Gaussians
+    
+    This ensures background Gaussians behind target objects don't get votes.
     """
     num_gaussians = splats["means"].shape[0]
     
@@ -266,9 +270,15 @@ def compute_roi_weights_voting(splats, dataset, masks, sh_degree=3, device="cuda
     roi_votes = torch.zeros(num_gaussians, device=device)
     roi_counts = torch.zeros(num_gaussians, device=device)
     
-    print("Computing ROI weights by accumulating votes from 2D masks...")
+    print("Computing ROI weights using render-based voting with occlusion handling...")
     
-    # Prepare colors
+    # Prepare Gaussians for rendering
+    means = splats["means"]
+    quats = splats["quats"]
+    scales = splats["scales"]
+    opacities = splats["opacities"]
+    
+    # Prepare colors (SH coefficients)
     colors = splats["colors"]
     num_sh_bases = (sh_degree + 1) ** 2
     colors_truncated = colors[:, :num_sh_bases, :]
@@ -282,9 +292,10 @@ def compute_roi_weights_voting(splats, dataset, masks, sh_degree=3, device="cuda
             continue
         
         # Get camera parameters
-        camtoworld = data["camtoworld"].unsqueeze(0).to(device)  # [1, 4, 4]
-        K = data["K"].unsqueeze(0).to(device)  # [1, 3, 3]
+        camtoworld = data["camtoworld"].to(device)  # [4, 4]
+        K = data["K"].to(device)  # [3, 3]
         height, width = data["image"].shape[:2]
+        viewmat = torch.inverse(camtoworld)
         
         # Get 2D mask
         mask_2d = masks[img_name]  # [H, W]
@@ -304,56 +315,81 @@ def compute_roi_weights_voting(splats, dataset, masks, sh_degree=3, device="cuda
         
         mask_tensor = torch.from_numpy(mask_2d).float().to(device)
         
-        # Rasterize to get per-pixel contribution
-        # We'll use a different approach: rasterize with alpha and approximate
-        # contribution by checking which Gaussians project to masked regions
-        
-        # Project Gaussians to 2D
         with torch.no_grad():
-            # Transform means to camera space
-            means_world = splats["means"]  # [N, 3]
-            means_homo = torch.cat([means_world, torch.ones(num_gaussians, 1, device=device)], dim=1)  # [N, 4]
-            viewmat = torch.linalg.inv(camtoworld[0])  # [4, 4]
-            means_cam = (viewmat @ means_homo.T).T  # [N, 4]
-            means_cam = means_cam[:, :3]  # [N, 3]
+            # STEP 1: Render depth map to get visible surface depths
+            renders_depth, _, _ = rasterization(
+                means=means,
+                quats=quats,
+                scales=scales,
+                opacities=opacities,
+                colors=colors_truncated,
+                viewmats=viewmat[None],
+                Ks=K[None],
+                width=width,
+                height=height,
+                sh_degree=sh_degree,
+                packed=False,
+                render_mode="D",  # Render depth only
+            )
+            depth_map = renders_depth[0, :, :, 0]  # [H, W]
             
-            # Project to image plane
-            K_mat = K[0]  # [3, 3]
-            means_proj = (K_mat @ means_cam.T).T  # [N, 3]
+            # STEP 2: Project Gaussians to 2D and get their depths
+            means_homo = torch.cat([means, torch.ones(num_gaussians, 1, device=device)], dim=1)  # [N, 4]
+            means_cam = (viewmat @ means_homo.T).T[:, :3]  # [N, 3]
+            
+            means_proj = (K @ means_cam.T).T  # [N, 3]
             means_2d = means_proj[:, :2] / (means_proj[:, 2:3] + 1e-6)  # [N, 2]
+            gaussian_depths = means_cam[:, 2]  # [N]
             
-            # Check if Gaussian centers are within masked regions
             # Convert to pixel coordinates
             px = means_2d[:, 0].long()
             py = means_2d[:, 1].long()
             
-            # Valid pixels (within image bounds)
-            valid = (px >= 0) & (px < width) & (py >= 0) & (py < height) & (means_cam[:, 2] > 0)
-            
-            # VECTORIZED: For valid Gaussians, check mask value at their projected location
-            # Get indices of valid Gaussians
+            # Valid pixels (within image bounds and in front of camera)
+            valid = (px >= 0) & (px < width) & (py >= 0) & (py < height) & (gaussian_depths > 0)
             valid_indices = torch.where(valid)[0]
             
-            if len(valid_indices) > 0:
-                # Get pixel coordinates for valid Gaussians
-                valid_px = px[valid_indices].clamp(0, width - 1)
-                valid_py = py[valid_indices].clamp(0, height - 1)
-                
-                # Sample mask values at projected locations (vectorized)
-                mask_values = mask_tensor[valid_py, valid_px]  # [num_valid]
-                
-                # Get opacities for valid Gaussians
-                valid_opacities = splats["opacities"][valid_indices].squeeze(-1)  # [num_valid]
-                
-                # Accumulate votes (vectorized)
-                roi_votes[valid_indices] += mask_values * valid_opacities
-                roi_counts[valid_indices] += 1
-                
-                # Debug first view
-                if idx == 0:
-                    print(f"    Valid Gaussians: {len(valid_indices):,}")
-                    print(f"    Gaussians in mask (value > 0): {(mask_values > 0).sum().item():,}")
-                    print(f"    Mean mask value at Gaussian centers: {mask_values.mean().item():.3f}")
+            if len(valid_indices) == 0:
+                continue
+            
+            # STEP 3: Occlusion test - only count Gaussians at visible depth
+            valid_px = px[valid_indices].clamp(0, width - 1)
+            valid_py = py[valid_indices].clamp(0, height - 1)
+            
+            # Get rendered depth at each Gaussian's projected location
+            rendered_depths = depth_map[valid_py, valid_px]  # [num_valid]
+            gaussian_depths_valid = gaussian_depths[valid_indices]  # [num_valid]
+            
+            # Occlusion test: Gaussian is visible if its depth matches rendered depth
+            # Use relative threshold to handle depth precision
+            depth_threshold = 0.05  # 5% relative difference
+            depth_diff = torch.abs(gaussian_depths_valid - rendered_depths)
+            depth_tolerance = depth_threshold * rendered_depths.clamp(min=0.1)
+            is_visible = depth_diff < depth_tolerance
+            
+            visible_indices = valid_indices[is_visible]
+            
+            if len(visible_indices) == 0:
+                continue
+            
+            # STEP 4: Accumulate votes for visible Gaussians in masked regions
+            visible_px = px[visible_indices].clamp(0, width - 1)
+            visible_py = py[visible_indices].clamp(0, height - 1)
+            
+            # Sample mask values at visible Gaussian locations
+            mask_values = mask_tensor[visible_py, visible_px]  # [num_visible]
+            
+            # Accumulate votes (weighted by mask value)
+            roi_votes[visible_indices] += mask_values
+            roi_counts[visible_indices] += 1
+            
+            # Debug first view
+            if idx == 0:
+                print(f"    Total Gaussians: {num_gaussians:,}")
+                print(f"    Valid (in bounds): {len(valid_indices):,}")
+                print(f"    Visible (passes occlusion): {len(visible_indices):,} ({100*len(visible_indices)/len(valid_indices):.1f}%)")
+                print(f"    In mask (value > 0): {(mask_values > 0).sum().item():,}")
+                print(f"    Mean mask value at visible Gaussians: {mask_values.mean().item():.3f}")
     
     # Normalize: average mask value across views where Gaussian is visible
     roi_weights = roi_votes / (roi_counts + 1e-6)
