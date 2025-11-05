@@ -275,8 +275,8 @@ def compute_roi_weights_voting(splats, dataset, masks, sh_degree=3, device="cuda
     # Prepare Gaussians for rendering
     means = splats["means"]
     quats = splats["quats"]
-    scales = splats["scales"]
-    opacities = splats["opacities"]
+    scales = torch.exp(splats["scales"])  # Transform from log-space
+    opacities = torch.sigmoid(splats["opacities"])  # Transform from logit-space
     
     # Prepare colors (SH coefficients)
     colors = splats["colors"]
