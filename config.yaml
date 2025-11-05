@@ -52,8 +52,8 @@ training:
 
 segmentation:
   text_prompt: "brown plant"               # Object to segment
-  dino_threshold: 0.35                     # GroundingDINO detection threshold
   box_threshold: 0.35                      # GroundingDINO box confidence
+  dino_threshold: 0.25                     # GroundingDINO text threshold (same as text_threshold)
   text_threshold: 0.25                     # GroundingDINO text confidence
   nms_threshold: 0.8                       # Non-maximum suppression
   sam_model: "sam2_hiera_large"            # SAM2 model variant
