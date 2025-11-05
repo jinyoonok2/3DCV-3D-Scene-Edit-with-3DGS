@@ -102,8 +102,8 @@ def main():
     config = ProjectConfig(args.config)
     
     # Override config with command-line arguments
-    holed_dir = args.holed_dir if args.holed_dir else str(config.get_path('roi') / '05a_holed')
-    output_dir = args.output_dir if args.output_dir else str(config.get_path('roi') / '05b_inpainted')
+    holed_dir = args.holed_dir if args.holed_dir else str(config.get_path('inpainting') / '05a_holed')
+    output_dir = args.output_dir if args.output_dir else str(config.get_path('inpainting') / '05b_inpainted')
     prompt = args.prompt if args.prompt else config.config.get('inpainting', {}).get('prompt', 'natural outdoor scene, grass, plants')
     negative_prompt = args.negative_prompt if args.negative_prompt else config.config.get('inpainting', {}).get('negative_prompt', 'blurry, distorted, artifacts')
     strength = args.strength if args.strength is not None else config.config.get('inpainting', {}).get('strength', 0.99)

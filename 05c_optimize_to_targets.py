@@ -127,10 +127,10 @@ def main():
     config = ProjectConfig(args.config)
     
     # Override config with command-line arguments
-    ckpt = args.ckpt if args.ckpt else str(config.get_path('roi') / '05a_holed' / 'ckpt_holed.pt')
-    targets_dir = args.targets_dir if args.targets_dir else str(config.get_path('roi') / '05b_inpainted' / 'targets' / 'train')
+    ckpt = args.ckpt if args.ckpt else str(config.get_path('inpainting') / '05a_holed' / 'ckpt_holed.pt')
+    targets_dir = args.targets_dir if args.targets_dir else str(config.get_path('inpainting') / '05b_inpainted' / 'targets' / 'train')
     data_root = args.data_root if args.data_root else str(config.get_path('dataset_root'))
-    output_dir = args.output_dir if args.output_dir else str(config.get_path('roi') / '05c_optimized')
+    output_dir = args.output_dir if args.output_dir else str(config.get_path('inpainting') / '05c_optimized')
     iters = args.iters if args.iters is not None else config.config.get('optimization', {}).get('iterations', 1000)
     lr_means = args.lr_means if args.lr_means is not None else config.config.get('optimization', {}).get('lr_means', 1.6e-4)
     lr_scales = args.lr_scales if args.lr_scales is not None else config.config.get('optimization', {}).get('lr_scales', 5e-3)

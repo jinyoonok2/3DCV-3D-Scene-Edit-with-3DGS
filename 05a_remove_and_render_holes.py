@@ -130,7 +130,7 @@ def main():
     ckpt = args.ckpt if args.ckpt else str(config.get_checkpoint_path('initial'))
     roi_path = args.roi if args.roi else str(config.get_path('roi') / 'roi.pt')
     data_root = args.data_root if args.data_root else str(config.get_path('dataset_root'))
-    output_dir = args.output_dir if args.output_dir else str(config.get_path('roi') / '05a_holed')
+    output_dir = args.output_dir if args.output_dir else str(config.get_path('inpainting') / '05a_holed')
     roi_thresh = args.roi_thresh if args.roi_thresh is not None else config.config['roi']['threshold']
     factor = args.factor if args.factor is not None else config.config['dataset']['factor']
     seed = args.seed if args.seed is not None else config.config['dataset']['seed']
