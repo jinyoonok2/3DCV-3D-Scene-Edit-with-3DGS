@@ -369,7 +369,8 @@ def compute_roi_weights_voting(splats, dataset, masks, sh_degree=3, device="cuda
             gaussian_depths_valid = gaussian_depths[valid_indices]
             
             # Depth tolerance test
-            depth_threshold = 0.05
+            # Higher threshold = thicker volumetric shell (captures inner core, not just surface)
+            depth_threshold = 0.25  # 25% tolerance to include Gaussians behind front surface
             depth_diff = torch.abs(gaussian_depths_valid - rendered_depths)
             depth_tolerance = depth_threshold * rendered_depths.clamp(min=0.1)
             is_visible = depth_diff < depth_tolerance
