@@ -219,7 +219,7 @@ def main():
         worldtoview = torch.inverse(camtoworld)
         
         # PASS 1: Render FULL scene with DEPTH
-        _, _, info_full = render_view(
+        renders_full, alphas_full, _ = render_view(
             means=params["means"],
             quats=params["quats"],
             scales=params["scales"],
@@ -233,10 +233,10 @@ def main():
             sh_degree=3,
             render_mode="D",  # Depth mode
         )
-        depth_full = info_full[0, :, :, 0]  # [H, W]
+        depth_full = renders_full[:, :, 0]  # [H, W] - depth is in first channel
         
-        # PASS 2: Render ROI-ONLY scene with RGB + DEPTH
-        render_roi, alpha_roi, info_roi = render_view(
+        # PASS 2: Render ROI-ONLY scene with DEPTH
+        renders_roi, alphas_roi, _ = render_view(
             means=params_roi_only["means"],
             quats=params_roi_only["quats"],
             scales=params_roi_only["scales"],
@@ -250,8 +250,8 @@ def main():
             sh_degree=3,
             render_mode="D",  # Depth mode
         )
-        depth_roi = info_roi[0, :, :, 0]  # [H, W]
-        alpha_roi = alpha_roi.squeeze(-1)  # [H, W]
+        depth_roi = renders_roi[:, :, 0]  # [H, W] - depth is in first channel
+        alpha_roi = alphas_roi.squeeze(-1)  # [H, W]
         
         # PASS 3: Render HOLED scene (for visualization)
         render_holed, _, _ = render_view(
