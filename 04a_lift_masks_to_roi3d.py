@@ -356,7 +356,7 @@ def compute_roi_weights_voting(splats, dataset, masks, sh_degree=3, device="cuda
                 width=width,
                 height=height,
                 sh_degree=sh_degree,
-                packed=True,
+                packed=False,  # Match Module 02 settings to avoid OOM
                 render_mode="D",
             )
             depth_map = renders_depth[0, :, :, 0]  # [H, W]
