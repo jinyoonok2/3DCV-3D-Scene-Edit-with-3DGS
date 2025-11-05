@@ -370,9 +370,11 @@ def compute_roi_weights_voting(splats, dataset, masks, sh_degree=3, device="cuda
             
             # Depth tolerance test
             # Use ABSOLUTE depth tolerance (in scene units) for robust volumetric selection
-            # This captures a thick shell regardless of object distance from camera
+            # Must be large enough to capture ENTIRE "artichoke" (outer shell + inner core)
+            # 04b visualization is misleading: outer shell occludes inner core, looks solid
+            # But inner core has roi_weight=0 and remains after deletion, breaking masks!
             depth_diff = torch.abs(gaussian_depths_valid - rendered_depths)
-            depth_tolerance = 0.5  # Select Gaussians within 0.5 scene units of surface (aggressive)
+            depth_tolerance = 1.0  # Very aggressive: grab entire dense cloud within 1.0 scene units
             is_visible = depth_diff < depth_tolerance
             
             visible_indices = valid_indices[is_visible]
