@@ -57,9 +57,6 @@ class ProjectConfig:
             self.get_path('masks'),
             self.get_path('roi'),
             self.get_path('inpainting'),
-            self.get_path('inpainting') / 'holed',
-            self.get_path('inpainting') / 'inpainted',
-            self.get_path('inpainting') / 'optimized',
             self.get_path('logs'),
         ]
         
