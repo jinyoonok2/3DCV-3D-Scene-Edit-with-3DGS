@@ -316,6 +316,10 @@ def compute_roi_weights_voting(splats, dataset, masks, sh_degree=3, device="cuda
         mask_tensor = torch.from_numpy(mask_2d).float().to(device)
         
         with torch.no_grad():
+            # STEP 1: Project ALL Gaussians to 2D first (cheap operation)
+            means_homo = torch.cat([means, torch.ones(num_gaussians, 1, device=device)], dim=1)  # [N, 4]
+            means_cam = (viewmat @ means_homo.T).T[:, :3]  # [N, 3]
+            
             # STEP 2: Project to 2D and get depths
             means_proj = (K @ means_cam.T).T  # [N, 3]
             means_2d = means_proj[:, :2] / (means_proj[:, 2:3] + 1e-6)  # [N, 2]
