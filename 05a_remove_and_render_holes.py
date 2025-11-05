@@ -72,6 +72,26 @@ def parse_args():
     return parser.parse_args()
 
 
+def extract_roi_gaussians(params, roi_weights, roi_thresh):
+    """Extract ROI-only Gaussians (for multi-pass rendering)"""
+    mask_roi = roi_weights > roi_thresh
+    n_original = len(roi_weights)
+    n_roi = mask_roi.sum().item()
+    
+    console.print(f"\n[yellow]Creating ROI-only scene:[/yellow]")
+    console.print(f"  Total Gaussians: {n_original:,}")
+    console.print(f"  ROI Gaussians:   {n_roi:,} ({100*n_roi/n_original:.1f}%)")
+    
+    roi_params = {}
+    for key, value in params.items():
+        if isinstance(value, torch.Tensor) and len(value) == n_original:
+            roi_params[key] = value[mask_roi]
+        else:
+            roi_params[key] = value
+    
+    return roi_params, mask_roi, n_roi
+
+
 def delete_roi_gaussians(params, roi_weights, roi_thresh):
     """Delete Gaussians in ROI and return new parameters"""
     mask_keep = roi_weights <= roi_thresh
@@ -94,8 +114,8 @@ def delete_roi_gaussians(params, roi_weights, roi_thresh):
     return new_params, mask_keep, n_deleted
 
 
-def render_view(means, quats, scales, opacities, sh0, shN, viewmat, K, width, height, sh_degree=3):
-    """Render a single view"""
+def render_view(means, quats, scales, opacities, sh0, shN, viewmat, K, width, height, sh_degree=3, render_mode="RGB"):
+    """Render a single view with specified render mode"""
     # Concatenate SH coefficients
     num_sh_bases = (sh_degree + 1) ** 2
     colors = torch.cat([sh0, shN], 1)[:, :num_sh_bases, :]  # [N, K, 3]
@@ -116,6 +136,7 @@ def render_view(means, quats, scales, opacities, sh0, shN, viewmat, K, width, he
         height=height,
         sh_degree=sh_degree,
         packed=False,
+        render_mode=render_mode,
     )
     return renders[0], alphas[0], info
 
@@ -167,7 +188,10 @@ def main():
     roi_weights = torch.load(roi_path, map_location=device)
     console.print(f"[green]✓ Loaded ROI (mean: {roi_weights.mean():.3f})[/green]")
     
-    # Delete ROI Gaussians
+    # Extract ROI-only Gaussians (for multi-pass rendering)
+    params_roi_only, mask_roi, n_roi = extract_roi_gaussians(params, roi_weights, roi_thresh)
+    
+    # Also create holed scene (for saving checkpoint)
     params_holed, mask_keep, n_deleted = delete_roi_gaussians(params, roi_weights, roi_thresh)
     
     # Load dataset
@@ -176,8 +200,12 @@ def main():
     dataset = Dataset(parser, split="train")
     console.print(f"[green]✓ Loaded {len(dataset)} training views[/green]")
     
-    # Render holed scene and create hole masks
-    console.print("\n[yellow]Rendering holed scene and computing hole masks...[/yellow]")
+    # Render holed scene using MULTI-PASS DEPTH COMPARISON (Gaussian Editor method)
+    console.print("\n[yellow]Rendering with multi-pass depth comparison...[/yellow]")
+    console.print("[cyan]This avoids the 'artichoke problem' by comparing depth maps:[/cyan]")
+    console.print("  Pass 1: Render full scene → D_full, A_full")
+    console.print("  Pass 2: Render ROI-only → D_roi, A_roi")
+    console.print("  Mask: pixels where A_roi > 0.1 AND |D_full - D_roi| < 0.01\n")
     
     for idx in tqdm(range(len(dataset)), desc="Rendering"):
         data = dataset[idx]
@@ -190,8 +218,8 @@ def main():
         K = data["K"].to(device)
         worldtoview = torch.inverse(camtoworld)
         
-        # Render ORIGINAL scene (before deletion)
-        render_orig, alpha_orig, _ = render_view(
+        # PASS 1: Render FULL scene with DEPTH
+        _, _, info_full = render_view(
             means=params["means"],
             quats=params["quats"],
             scales=params["scales"],
@@ -203,10 +231,30 @@ def main():
             width=width,
             height=height,
             sh_degree=3,
+            render_mode="D",  # Depth mode
         )
+        depth_full = info_full[0, :, :, 0]  # [H, W]
         
-        # Render HOLED scene (after deletion)
-        render_holed, alpha_holed, _ = render_view(
+        # PASS 2: Render ROI-ONLY scene with RGB + DEPTH
+        render_roi, alpha_roi, info_roi = render_view(
+            means=params_roi_only["means"],
+            quats=params_roi_only["quats"],
+            scales=params_roi_only["scales"],
+            opacities=params_roi_only["opacities"],
+            sh0=params_roi_only["sh0"],
+            shN=params_roi_only["shN"],
+            viewmat=worldtoview,
+            K=K,
+            width=width,
+            height=height,
+            sh_degree=3,
+            render_mode="D",  # Depth mode
+        )
+        depth_roi = info_roi[0, :, :, 0]  # [H, W]
+        alpha_roi = alpha_roi.squeeze(-1)  # [H, W]
+        
+        # PASS 3: Render HOLED scene (for visualization)
+        render_holed, _, _ = render_view(
             means=params_holed["means"],
             quats=params_holed["quats"],
             scales=params_holed["scales"],
@@ -218,12 +266,18 @@ def main():
             width=width,
             height=height,
             sh_degree=3,
+            render_mode="RGB",
         )
         
-        # Create hole mask by comparing alpha channels
-        # Hole = where original had content but holed doesn't
-        alpha_diff = alpha_orig - alpha_holed
-        mask = (alpha_diff > 0.1).float()  # Significant alpha drop = hole
+        # CREATE MASK using depth comparison
+        # A pixel is a "hole" if:
+        # 1. ROI is actually visible here (A_roi > 0.1)
+        # 2. ROI is the closest object (|D_full - D_roi| < depth_threshold)
+        depth_diff = torch.abs(depth_full - depth_roi)
+        depth_threshold = 0.01  # 1cm in scene units
+        
+        mask = (alpha_roi > 0.1) & (depth_diff < depth_threshold)
+        mask = mask.float()  # [H, W]
         
         # Save render and mask
         img_np = (render_holed.cpu().numpy() * 255).astype(np.uint8)
