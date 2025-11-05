@@ -59,13 +59,13 @@ segmentation:
   sam_model: "sam2_hiera_large"            # SAM2 model variant
   
 roi:
-  threshold: 0.1                           # ROI weight threshold for deletion (lower = more permissive)
+  threshold: 0.01                          # ROI weight threshold for deletion (lower = more permissive)
   min_views: 3                             # Min views for Gaussian to be in ROI
   
 inpainting:
   # Module 05a - Removal
   removal:
-    roi_threshold: 0.1                     # Which Gaussians to delete (lower = more permissive)
+    roi_threshold: 0.01                    # Which Gaussians to delete (lower = more permissive)
     
   # Module 05b - SDXL Inpainting
   sdxl:
