@@ -316,27 +316,7 @@ def compute_roi_weights_voting(splats, dataset, masks, sh_degree=3, device="cuda
         mask_tensor = torch.from_numpy(mask_2d).float().to(device)
         
         with torch.no_grad():
-            # STEP 1: Render depth map to get visible surface depths
-            renders_depth, _, _ = rasterization(
-                means=means,
-                quats=quats,
-                scales=scales,
-                opacities=opacities,
-                colors=colors_truncated,
-                viewmats=viewmat[None],
-                Ks=K[None],
-                width=width,
-                height=height,
-                sh_degree=sh_degree,
-                packed=True,  # CRITICAL: Use packed mode to save memory!
-                render_mode="D",  # Render depth only
-            )
-            depth_map = renders_depth[0, :, :, 0]  # [H, W]
-            
-            # STEP 2: Project Gaussians to 2D and get their depths
-            means_homo = torch.cat([means, torch.ones(num_gaussians, 1, device=device)], dim=1)  # [N, 4]
-            means_cam = (viewmat @ means_homo.T).T[:, :3]  # [N, 3]
-            
+            # STEP 2: Project to 2D and get depths
             means_proj = (K @ means_cam.T).T  # [N, 3]
             means_2d = means_proj[:, :2] / (means_proj[:, 2:3] + 1e-6)  # [N, 2]
             gaussian_depths = means_cam[:, 2]  # [N]
@@ -345,24 +325,47 @@ def compute_roi_weights_voting(splats, dataset, masks, sh_degree=3, device="cuda
             px = means_2d[:, 0].long()
             py = means_2d[:, 1].long()
             
-            # Valid pixels (within image bounds and in front of camera)
-            valid = (px >= 0) & (px < width) & (py >= 0) & (py < height) & (gaussian_depths > 0)
+            # STEP 3: Filter to only in-bounds Gaussians (drastically reduce set)
+            valid = (px >= 0) & (px < width) & (py >= 0) & (py < height) & (gaussian_depths > 0.01)
             valid_indices = torch.where(valid)[0]
             
             if len(valid_indices) == 0:
                 continue
             
-            # STEP 3: Occlusion test - only count Gaussians at visible depth
+            # STEP 4: Render depth ONLY with visible Gaussians (much smaller set!)
+            # Create subset of Gaussians
+            means_valid = means[valid_indices]
+            quats_valid = quats[valid_indices]
+            scales_valid = scales[valid_indices]
+            opacities_valid = opacities[valid_indices]
+            colors_valid = colors_truncated[valid_indices]
+            
+            # Render depth map with subset
+            renders_depth, _, _ = rasterization(
+                means=means_valid,
+                quats=quats_valid,
+                scales=scales_valid,
+                opacities=opacities_valid,
+                colors=colors_valid,
+                viewmats=viewmat[None],
+                Ks=K[None],
+                width=width,
+                height=height,
+                sh_degree=sh_degree,
+                packed=True,
+                render_mode="D",
+            )
+            depth_map = renders_depth[0, :, :, 0]  # [H, W]
+            
+            # STEP 5: Occlusion test on the valid subset
             valid_px = px[valid_indices].clamp(0, width - 1)
             valid_py = py[valid_indices].clamp(0, height - 1)
             
-            # Get rendered depth at each Gaussian's projected location
-            rendered_depths = depth_map[valid_py, valid_px]  # [num_valid]
-            gaussian_depths_valid = gaussian_depths[valid_indices]  # [num_valid]
+            rendered_depths = depth_map[valid_py, valid_px]
+            gaussian_depths_valid = gaussian_depths[valid_indices]
             
-            # Occlusion test: Gaussian is visible if its depth matches rendered depth
-            # Use relative threshold to handle depth precision
-            depth_threshold = 0.05  # 5% relative difference
+            # Depth tolerance test
+            depth_threshold = 0.05
             depth_diff = torch.abs(gaussian_depths_valid - rendered_depths)
             depth_tolerance = depth_threshold * rendered_depths.clamp(min=0.1)
             is_visible = depth_diff < depth_tolerance
@@ -372,22 +375,20 @@ def compute_roi_weights_voting(splats, dataset, masks, sh_degree=3, device="cuda
             if len(visible_indices) == 0:
                 continue
             
-            # STEP 4: Accumulate votes for visible Gaussians in masked regions
+            # STEP 6: Accumulate votes for visible Gaussians
             visible_px = px[visible_indices].clamp(0, width - 1)
             visible_py = py[visible_indices].clamp(0, height - 1)
             
-            # Sample mask values at visible Gaussian locations
-            mask_values = mask_tensor[visible_py, visible_px]  # [num_visible]
+            mask_values = mask_tensor[visible_py, visible_px]
             
-            # Accumulate votes (weighted by mask value)
             roi_votes[visible_indices] += mask_values
             roi_counts[visible_indices] += 1
             
             # Debug first view
             if idx == 0:
                 print(f"    Total Gaussians: {num_gaussians:,}")
-                print(f"    Valid (in bounds): {len(valid_indices):,}")
-                print(f"    Visible (passes occlusion): {len(visible_indices):,} ({100*len(visible_indices)/len(valid_indices):.1f}%)")
+                print(f"    In-bounds Gaussians: {len(valid_indices):,} ({100*len(valid_indices)/num_gaussians:.1f}%)")
+                print(f"    Visible (passes occlusion): {len(visible_indices):,} ({100*len(visible_indices)/len(valid_indices):.1f}% of in-bounds)")
                 print(f"    In mask (value > 0): {(mask_values > 0).sum().item():,}")
                 print(f"    Mean mask value at visible Gaussians: {mask_values.mean().item():.3f}")
     
