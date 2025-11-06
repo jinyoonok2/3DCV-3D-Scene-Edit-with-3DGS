@@ -51,6 +51,9 @@ def parse_args():
     parser.add_argument("--guidance_scale", type=float, default=None, help="CFG scale (overrides config)")
     parser.add_argument("--num_steps", type=int, default=None, help="Denoising steps (overrides config)")
     parser.add_argument("--seed", type=int, default=None, help="Random seed (overrides config)")
+    parser.add_argument("--mask_blur", type=int, default=8, help="Mask blur radius (default: 8)")
+    parser.add_argument("--mask_erode", type=int, default=0, help="Erode mask by N pixels (shrink hole)")
+    parser.add_argument("--mask_dilate", type=int, default=0, help="Dilate mask by N pixels (expand hole)")
     parser.add_argument("--device", type=str, default="cuda", help="Device")
     return parser.parse_args()
 
@@ -73,11 +76,37 @@ def load_sdxl_inpainting(device):
     return pipe
 
 
-def inpaint_view(pipe, image_path, mask_path, prompt, negative_prompt, strength, guidance_scale, num_steps, seed):
+def process_mask(mask, blur_radius=8, erode=0, dilate=0):
+    """Process mask with erosion/dilation and blurring"""
+    import cv2
+    
+    mask_np = np.array(mask)
+    
+    # Erode (shrink mask)
+    if erode > 0:
+        kernel = np.ones((erode, erode), np.uint8)
+        mask_np = cv2.erode(mask_np, kernel, iterations=1)
+    
+    # Dilate (expand mask)
+    if dilate > 0:
+        kernel = np.ones((dilate, dilate), np.uint8)
+        mask_np = cv2.dilate(mask_np, kernel, iterations=1)
+    
+    # Blur edges
+    if blur_radius > 0:
+        mask_np = cv2.GaussianBlur(mask_np, (blur_radius*2+1, blur_radius*2+1), 0)
+    
+    return Image.fromarray(mask_np)
+
+
+def inpaint_view(pipe, image_path, mask_path, prompt, negative_prompt, strength, guidance_scale, num_steps, seed, mask_blur=8, mask_erode=0, mask_dilate=0):
     """Inpaint a single view"""
     # Load images
     img = Image.open(image_path).convert("RGB")
     mask = Image.open(mask_path).convert("L")
+    
+    # Process mask
+    mask = process_mask(mask, blur_radius=mask_blur, erode=mask_erode, dilate=mask_dilate)
     
     # Run inpainting
     generator = torch.Generator(device=pipe.device).manual_seed(seed)
@@ -172,6 +201,9 @@ def main():
             guidance_scale=guidance_scale,
             num_steps=num_steps,
             seed=seed,  # SAME seed for consistency across views
+            mask_blur=args.mask_blur,
+            mask_erode=args.mask_erode,
+            mask_dilate=args.mask_dilate,
         )
         
         # Save
