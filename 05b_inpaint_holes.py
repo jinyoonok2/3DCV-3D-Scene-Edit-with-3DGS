@@ -100,21 +100,44 @@ def process_mask(mask, blur_radius=8, erode=0, dilate=0):
 
 
 def inpaint_view(pipe, image_path, mask_path, prompt, negative_prompt, strength, guidance_scale, num_steps, seed, mask_blur=8, mask_erode=0, mask_dilate=0):
-    """Inpaint a single view"""
+    """Inpaint a single view with pre-fill of surrounding context color"""
+    import cv2
+    
     # Load images
-    img = Image.open(image_path).convert("RGB")
-    mask = Image.open(mask_path).convert("L")
+    img_pil = Image.open(image_path).convert("RGB")
+    mask_pil = Image.open(mask_path).convert("L")
     
-    # Process mask
-    mask = process_mask(mask, blur_radius=mask_blur, erode=mask_erode, dilate=mask_dilate)
+    # Process mask for inpainting (with dilation/blur)
+    mask_pil_processed = process_mask(mask_pil, blur_radius=mask_blur, erode=mask_erode, dilate=mask_dilate)
     
-    # Run inpainting
+    # --- PRE-FILL LOGIC: Fill hole with average surrounding color ---
+    # This gives SDXL a strong hint: "the hole is already table-colored, just add texture"
+    img_np = np.array(img_pil)
+    mask_np_orig = np.array(mask_pil)  # Use original mask for color sampling
+    
+    # Create inverse mask (everything EXCEPT the hole)
+    # Dilate it slightly to avoid sampling edge pixels that might be artifacts
+    kernel = np.ones((5, 5), np.uint8)
+    inv_mask = cv2.dilate(255 - mask_np_orig, kernel, iterations=1)
+    
+    # Get average color from surrounding table pixels (not in hole)
+    avg_color_bgr = cv2.mean(img_np, mask=inv_mask)[:3]  # Returns BGR
+    avg_color_rgb = (int(avg_color_bgr[2]), int(avg_color_bgr[1]), int(avg_color_bgr[0]))
+    
+    # Create patch image filled with average color
+    patch_img = Image.new("RGB", img_pil.size, avg_color_rgb)
+    
+    # Composite: use patch where mask is white, original image elsewhere
+    img_prefilled = Image.composite(patch_img, img_pil, mask_pil)
+    # --- END PRE-FILL LOGIC ---
+    
+    # Run inpainting on pre-filled image
     generator = torch.Generator(device=pipe.device).manual_seed(seed)
     result = pipe(
         prompt=prompt,
         negative_prompt=negative_prompt,
-        image=img,
-        mask_image=mask,
+        image=img_prefilled,  # Use pre-filled image instead of original
+        mask_image=mask_pil_processed,
         strength=strength,
         num_inference_steps=num_steps,
         guidance_scale=guidance_scale,
