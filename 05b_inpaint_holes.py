@@ -104,8 +104,13 @@ def main():
     # Override config with command-line arguments
     holed_dir = args.holed_dir if args.holed_dir else str(config.get_path('inpainting') / '05a_holed')
     output_dir = args.output_dir if args.output_dir else str(config.get_path('inpainting') / '05b_inpainted')
-    prompt = args.prompt if args.prompt else config.config.get('inpainting', {}).get('prompt', 'natural outdoor scene, grass, plants')
-    negative_prompt = args.negative_prompt if args.negative_prompt else config.config.get('inpainting', {}).get('negative_prompt', 'blurry, distorted, artifacts')
+    
+    # IMPROVED DEFAULTS for clean removal (empty table)
+    default_prompt = 'clean wooden table surface, empty table, natural wood texture'
+    default_negative = 'objects, plants, pots, flowers, items, things, blurry, distorted, artifacts'
+    
+    prompt = args.prompt if args.prompt else config.config.get('inpainting', {}).get('prompt', default_prompt)
+    negative_prompt = args.negative_prompt if args.negative_prompt else config.config.get('inpainting', {}).get('negative_prompt', default_negative)
     strength = args.strength if args.strength is not None else config.config.get('inpainting', {}).get('strength', 0.99)
     guidance_scale = args.guidance_scale if args.guidance_scale is not None else config.config.get('inpainting', {}).get('guidance_scale', 7.5)
     num_steps = args.num_steps if args.num_steps is not None else config.config.get('inpainting', {}).get('num_steps', 50)
@@ -156,6 +161,7 @@ def main():
             continue
         
         # Inpaint
+        # Use SAME seed for all views for consistency (not seed + idx)
         result = inpaint_view(
             pipe=pipe,
             image_path=img_path,
@@ -165,7 +171,7 @@ def main():
             strength=strength,
             guidance_scale=guidance_scale,
             num_steps=num_steps,
-            seed=seed + int(idx),  # Different seed per view
+            seed=seed,  # SAME seed for consistency across views
         )
         
         # Save

@@ -136,15 +136,24 @@ python 03_ground_text_to_masks.py \
 ---
 
 ### 04a. Lift Masks to 3D ROI
-Convert 2D masks to per-Gaussian ROI weights.
+Convert 2D masks to per-Gaussian ROI weights using render-based voting with occlusion filtering.
 ```bash
 python 04a_lift_masks_to_roi3d.py
 python 04a_lift_masks_to_roi3d.py --roi_thresh 0.5
 ```
 
-**Algorithm**: Projects Gaussians to each view, checks mask overlap, computes `roi_weight = masked_views / visible_views`
+**Algorithm**: 
+1. For each training view with a mask:
+   - Render depth map to get visible surface
+   - Project all Gaussians to 2D pixel coordinates
+   - Filter to only in-bounds Gaussians (reduces computation)
+   - Perform occlusion test: depth_diff < 5% of rendered depth (relative tolerance)
+   - Accumulate mask values only for visible (non-occluded) Gaussians
+2. Normalize: `roi_weight = sum(mask_values) / visible_views`
 
-**Outputs**: `roi.pt` (per-Gaussian weights [0,1])
+**Occlusion Handling**: Uses relative depth tolerance (5% of scene depth) to ensure only Gaussians on the visible surface are selected, excluding background Gaussians behind the target object.
+
+**Outputs**: `roi.pt` (per-Gaussian weights [0,1]), `roi_binary.pt`, `metrics.json`
 **Time**: ~2-15 min depending on GPU (RTX 4090: ~3 min, RTX 2060: ~10 min)
 
 ---
@@ -159,15 +168,29 @@ python 04b_visualize_roi.py
 ---
 
 ### 05a. Remove and Render Holes
-Delete ROI Gaussians and render scene with holes.
+Delete ROI Gaussians and generate hole masks using multi-pass depth comparison.
 ```bash
 python 05a_remove_and_render_holes.py
 python 05a_remove_and_render_holes.py --roi_thresh 0.7
 ```
+
+**Multi-Pass Depth Comparison** (Gaussian Editor Method):
+This module uses a robust 3-pass rendering approach to identify holes:
+1. **Pass 1**: Render full scene with depth mode → `depth_full` (closest object at each pixel)
+2. **Pass 2**: Render ROI-only scene with depth mode → `depth_roi`, `alpha_roi` (where ROI exists)
+3. **Pass 3**: Render holed scene (ROI deleted) → visualization
+
+**Mask Generation**: `mask = (alpha_roi > 0.1) & (|depth_full - depth_roi| < 0.01)`
+- Identifies pixels where ROI was the **frontmost visible object**
+- Robust to "artichoke problem" (incomplete ROI selection with inner core remaining)
+- Only marks pixels that need inpainting (not occluded regions)
+
+**Why This Works**: Instead of comparing opacity before/after deletion (fails if inner core remains), we ask "Is the ROI the closest visible object?" This approach handles volumetric 3D Gaussian clouds correctly.
+
 **Outputs**: 
-- `ckpt_holed.pt`: Checkpoint with ROI removed
-- `renders/`: Holed scene images
-- `masks/`: Hole masks (white = hole)
+- `holed/train/`: Holed scene renders (pot removed)
+- `masks/train/`: Hole masks for inpainting (white = needs inpainting)
+- Per-view depth maps and comparison visualizations
 
 ---
 
@@ -260,6 +283,49 @@ project/
 
 ---
 
+## Technical Improvements
+
+### Module 04a: Occlusion-Aware ROI Computation
+**Problem**: Original approach included background Gaussians behind target objects in the ROI.
+
+**Solution**: Render-based voting with depth filtering:
+- Projects all Gaussians to 2D for each view
+- Renders depth map to identify visible surface
+- Filters Gaussians using relative depth tolerance: `depth_diff < 5% * scene_depth`
+- Only visible (non-occluded) Gaussians receive mask votes
+- Results in precise ROI selection excluding background
+
+**Benefits**:
+- ✅ Accurate ROI boundaries
+- ✅ No background leakage
+- ✅ Stable across different scene scales (relative threshold)
+
+### Module 05a: Multi-Pass Depth Comparison for Hole Masks
+**Problem**: Original alpha-difference method failed with volumetric Gaussian clouds ("artichoke problem"):
+- Deleting outer shell left inner core
+- Inner core maintained opacity → `alpha_diff ≈ 0` → empty masks
+
+**Solution**: Three-pass rendering with depth comparison (Gaussian Editor approach):
+1. Render full scene → `depth_full` (what's closest?)
+2. Render ROI-only → `depth_roi`, `alpha_roi` (where is ROI?)
+3. Compare: `mask = (alpha_roi > 0.1) & (|depth_full - depth_roi| < 0.01)`
+
+**Key Insight**: Instead of asking "Did opacity change?" (fails if inner core remains), we ask "Was the ROI the frontmost visible object?" (works regardless of deletion completeness)
+
+**Benefits**:
+- ✅ Robust to incomplete ROI selection
+- ✅ Correctly identifies visible surfaces only
+- ✅ Handles occlusions automatically
+- ✅ Precise hole masks for inpainting
+
+**Comparison**:
+| Approach | Robustness | Occlusion Handling | Inner Core Problem |
+|----------|------------|--------------------|--------------------|
+| Alpha difference (old) | ❌ Fragile | ❌ No | ❌ Fails |
+| Depth comparison (new) | ✅ Robust | ✅ Yes | ✅ Works |
+
+---
+
 ## Advanced Usage
 
 ### Custom Config Files
@@ -308,8 +374,14 @@ python 04a_lift_masks_to_roi3d.py  # Heavy computation
 - `reference_box`: Spatial filter [x1,y1,x2,y2]
 
 ### ROI (Module 04a)
-- `roi_thresh`: Threshold for binary ROI (0.5-0.8)
+- `roi_thresh`: Threshold for binary ROI (0.01-0.8, default: 0.01 for maximum inclusiveness)
 - `min_views`: Minimum views for Gaussian inclusion (default: 3)
+- `depth_threshold`: Relative depth tolerance for occlusion filtering (default: 0.05 = 5%)
+
+### Hole Masking (Module 05a)
+- `roi_thresh`: ROI threshold for deletion (should match 04a setting)
+- `depth_threshold`: Depth comparison tolerance in scene units (default: 0.01m)
+- `alpha_threshold`: Minimum alpha for ROI visibility (default: 0.1)
 
 ### Inpainting (Module 05b)
 - `prompt`: SDXL inpainting prompt
@@ -368,9 +440,26 @@ python 03_ground_text_to_masks.py --text "plant . potted plant . planter"
 
 **ROI too large/small:**
 ```bash
-# Adjust threshold
-python 04a_lift_masks_to_roi3d.py --roi_thresh 0.6  # Higher = smaller ROI
+# Adjust threshold (higher = smaller ROI, more selective)
+python 04a_lift_masks_to_roi3d.py --roi_thresh 0.6  # For smaller, precise ROI
+python 04a_lift_masks_to_roi3d.py --roi_thresh 0.01 # For maximum inclusiveness
 ```
+
+**Empty or incorrect hole masks (Module 05a):**
+- ✅ **Solved**: Now uses multi-pass depth comparison instead of alpha difference
+- If masks still look wrong:
+  ```bash
+  # Adjust depth comparison threshold
+  python 05a_remove_and_render_holes.py --depth_threshold 0.02  # More permissive
+  
+  # Or adjust alpha threshold for ROI visibility
+  python 05a_remove_and_render_holes.py --alpha_threshold 0.05  # Lower = more sensitive
+  ```
+
+**"Artichoke problem" (inner core remaining after deletion):**
+- ✅ **Solved**: Module 05a's depth comparison method is robust to incomplete ROI selection
+- The new approach asks "Was the ROI frontmost?" instead of "Did opacity change?"
+- Works correctly even if some inner Gaussians remain after deletion
 
 ---
 
