@@ -1,22 +1,27 @@
 #!/usr/bin/env python3
 """
-05b_inpaint_holes.py - Inpaint Holes with SDXL
+05b_inpaint_holes.py - Inpaint Holes with SDXL or LaMa
 
-Goal: Use SDXL Inpainting to fill holes in rendered views.
+Goal: Use inpainting models to fill holes in rendered views.
+
+Models:
+  - SDXL: Creative inpainting with text prompts (good for adding content)
+  - LaMa: Object removal inpainting (good for clean removal, no hallucination)
 
 Approach:
   1. Load holed renders and masks from 05a
-  2. For each view, run SDXL Inpainting to fill the hole
+  2. For each view, run inpainting to fill the hole
   3. Save inpainted target images
 
 Inputs:
   --holed_dir: Directory with holed renders (from 05a)
   --output_dir: Output directory (default: sibling of holed_dir)
-  --prompt: Inpainting prompt
-  --negative_prompt: Negative prompt  
+  --model: Inpainting model to use (sdxl or lama, default: sdxl)
+  --prompt: Inpainting prompt (SDXL only)
+  --negative_prompt: Negative prompt (SDXL only)
   --strength: SDXL denoising strength (0-1)
-  --guidance_scale: CFG scale (default: 7.5)
-  --num_steps: Number of denoising steps (default: 50)
+  --guidance_scale: CFG scale (SDXL only, default: 7.5)
+  --num_steps: Number of denoising steps (SDXL only, default: 50)
 
 Outputs (saved in output_dir/05b_inpainted/):
   - targets/train/*.png: Inpainted target images
@@ -41,15 +46,16 @@ console = Console()
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Inpaint holes with SDXL")
+    parser = argparse.ArgumentParser(description="Inpaint holes with SDXL or LaMa")
     parser.add_argument("--config", type=str, default="config.yaml", help="Path to config file (default: config.yaml)")
     parser.add_argument("--holed_dir", type=str, default=None, help="Directory from 05a (overrides config)")
     parser.add_argument("--output_dir", type=str, default=None, help="Output directory (overrides config)")
-    parser.add_argument("--prompt", type=str, default=None, help="Prompt (overrides config)")
-    parser.add_argument("--negative_prompt", type=str, default=None, help="Negative prompt (overrides config)")
-    parser.add_argument("--strength", type=float, default=None, help="Denoising strength (overrides config)")
-    parser.add_argument("--guidance_scale", type=float, default=None, help="CFG scale (overrides config)")
-    parser.add_argument("--num_steps", type=int, default=None, help="Denoising steps (overrides config)")
+    parser.add_argument("--model", type=str, default="sdxl", choices=["sdxl", "lama"], help="Inpainting model (sdxl or lama, default: sdxl)")
+    parser.add_argument("--prompt", type=str, default=None, help="Prompt (SDXL only, overrides config)")
+    parser.add_argument("--negative_prompt", type=str, default=None, help="Negative prompt (SDXL only, overrides config)")
+    parser.add_argument("--strength", type=float, default=None, help="Denoising strength (SDXL only, overrides config)")
+    parser.add_argument("--guidance_scale", type=float, default=None, help="CFG scale (SDXL only, overrides config)")
+    parser.add_argument("--num_steps", type=int, default=None, help="Denoising steps (SDXL only, overrides config)")
     parser.add_argument("--seed", type=int, default=None, help="Random seed (overrides config)")
     parser.add_argument("--mask_blur", type=int, default=8, help="Mask blur radius (default: 8)")
     parser.add_argument("--mask_erode", type=int, default=0, help="Erode mask by N pixels (shrink hole)")
@@ -76,6 +82,18 @@ def load_sdxl_inpainting(device):
     return pipe
 
 
+def load_lama_inpainting(device):
+    """Load LaMa Inpainting model"""
+    from simple_lama_inpainting import SimpleLama
+    
+    console.print("[cyan]Loading LaMa Inpainting model...[/cyan]")
+    console.print("[dim](This may take a moment on first run - downloading ~200MB)[/dim]")
+    
+    simple_lama = SimpleLama(device=device)
+    console.print("[green]✓ LaMa Inpainting loaded[/green]")
+    return simple_lama
+
+
 def process_mask(mask, blur_radius=8, erode=0, dilate=0):
     """Process mask with erosion/dilation and blurring"""
     import cv2
@@ -99,8 +117,8 @@ def process_mask(mask, blur_radius=8, erode=0, dilate=0):
     return Image.fromarray(mask_np)
 
 
-def inpaint_view(pipe, image_path, mask_path, prompt, negative_prompt, strength, guidance_scale, num_steps, seed, mask_blur=8, mask_erode=0, mask_dilate=0):
-    """Inpaint a single view with pre-fill of surrounding context color"""
+def inpaint_view_sdxl(pipe, image_path, mask_path, prompt, negative_prompt, strength, guidance_scale, num_steps, seed, mask_blur=8, mask_erode=0, mask_dilate=0):
+    """Inpaint a single view with SDXL (with pre-fill of surrounding context color)"""
     import cv2
     
     # Load images
@@ -147,6 +165,21 @@ def inpaint_view(pipe, image_path, mask_path, prompt, negative_prompt, strength,
     return result
 
 
+def inpaint_view_lama(lama_model, image_path, mask_path, mask_blur=8, mask_erode=0, mask_dilate=0):
+    """Inpaint a single view with LaMa (no prompts, pure texture continuation)"""
+    # Load images
+    img_pil = Image.open(image_path).convert("RGB")
+    mask_pil = Image.open(mask_path).convert("L")
+    
+    # Process mask for inpainting (with dilation/blur)
+    mask_pil_processed = process_mask(mask_pil, blur_radius=mask_blur, erode=mask_erode, dilate=mask_dilate)
+    
+    # Run LaMa inpainting (simple API - no prompts, no seeds)
+    result = lama_model(img_pil, mask_pil_processed)
+    
+    return result
+
+
 def main():
     args = parse_args()
     
@@ -167,7 +200,7 @@ def main():
     device = torch.device(args.device)
     
     console.print("\n[bold cyan]" + "="*80 + "[/bold cyan]")
-    console.print("[bold cyan]05b - Inpaint Holes with SDXL[/bold cyan]")
+    console.print(f"[bold cyan]05b - Inpaint Holes with {args.model.upper()}[/bold cyan]")
     console.print("[bold cyan]" + "="*80 + "[/bold cyan]\n")
     
     # Setup paths
@@ -186,16 +219,22 @@ def main():
     
     console.print(f"[cyan]Input directory:[/cyan] {holed_dir}")
     console.print(f"[cyan]Output directory:[/cyan] {output_dir}")
-    console.print(f"[cyan]Prompt:[/cyan] {prompt}")
-    console.print(f"[cyan]Strength:[/cyan] {strength}\n")
+    console.print(f"[cyan]Model:[/cyan] {args.model.upper()}")
+    if args.model == "sdxl":
+        console.print(f"[cyan]Prompt:[/cyan] {prompt}")
+        console.print(f"[cyan]Strength:[/cyan] {strength}")
+    console.print("")
     
     # Get image list
     image_files = sorted(renders_dir.glob("*.png"))
     n_images = len(image_files)
     console.print(f"[cyan]Found {n_images} images to inpaint[/cyan]\n")
     
-    # Load SDXL
-    pipe = load_sdxl_inpainting(device)
+    # Load model
+    if args.model == "sdxl":
+        pipe = load_sdxl_inpainting(device)
+    else:  # lama
+        pipe = load_lama_inpainting(device)
     
     # Inpaint each view
     console.print("\n[yellow]Inpainting views...[/yellow]")
@@ -208,22 +247,31 @@ def main():
             console.print(f"[yellow]Warning: No mask for {idx}, skipping[/yellow]")
             continue
         
-        # Inpaint
-        # Use SAME seed for all views for consistency (not seed + idx)
-        result = inpaint_view(
-            pipe=pipe,
-            image_path=img_path,
-            mask_path=mask_path,
-            prompt=prompt,
-            negative_prompt=negative_prompt,
-            strength=strength,
-            guidance_scale=guidance_scale,
-            num_steps=num_steps,
-            seed=seed,  # SAME seed for consistency across views
-            mask_blur=args.mask_blur,
-            mask_erode=args.mask_erode,
-            mask_dilate=args.mask_dilate,
-        )
+        # Inpaint based on model choice
+        if args.model == "sdxl":
+            result = inpaint_view_sdxl(
+                pipe=pipe,
+                image_path=img_path,
+                mask_path=mask_path,
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                strength=strength,
+                guidance_scale=guidance_scale,
+                num_steps=num_steps,
+                seed=seed,  # SAME seed for consistency across views
+                mask_blur=args.mask_blur,
+                mask_erode=args.mask_erode,
+                mask_dilate=args.mask_dilate,
+            )
+        else:  # lama
+            result = inpaint_view_lama(
+                lama_model=pipe,
+                image_path=img_path,
+                mask_path=mask_path,
+                mask_blur=args.mask_blur,
+                mask_erode=args.mask_erode,
+                mask_dilate=args.mask_dilate,
+            )
         
         # Save
         result.save(targets_dir / f"{idx}.png")
@@ -239,12 +287,13 @@ def main():
             "holed_dir": str(holed_dir),
         },
         "parameters": {
-            "prompt": prompt,
-            "negative_prompt": negative_prompt,
-            "strength": strength,
-            "guidance_scale": guidance_scale,
-            "num_steps": num_steps,
-            "seed": seed,
+            "model": args.model,
+            "prompt": prompt if args.model == "sdxl" else None,
+            "negative_prompt": negative_prompt if args.model == "sdxl" else None,
+            "strength": strength if args.model == "sdxl" else None,
+            "guidance_scale": guidance_scale if args.model == "sdxl" else None,
+            "num_steps": num_steps if args.model == "sdxl" else None,
+            "seed": seed if args.model == "sdxl" else None,
         },
         "results": {
             "n_inpainted": n_images,
