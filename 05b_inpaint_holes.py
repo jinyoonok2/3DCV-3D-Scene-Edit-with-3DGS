@@ -157,12 +157,8 @@ def main():
     holed_dir = args.holed_dir if args.holed_dir else str(config.get_path('inpainting') / '05a_holed')
     output_dir = args.output_dir if args.output_dir else str(config.get_path('inpainting') / '05b_inpainted')
     
-    # IMPROVED DEFAULTS for clean removal (empty table)
-    default_prompt = 'clean wooden table surface, empty table, natural wood texture'
-    default_negative = 'objects, plants, pots, flowers, items, things, blurry, distorted, artifacts'
-    
-    prompt = args.prompt if args.prompt else config.config.get('inpainting', {}).get('prompt', default_prompt)
-    negative_prompt = args.negative_prompt if args.negative_prompt else config.config.get('inpainting', {}).get('negative_prompt', default_negative)
+    prompt = args.prompt if args.prompt else config.config.get('inpainting', {}).get('prompt', 'wooden table surface')
+    negative_prompt = args.negative_prompt if args.negative_prompt else config.config.get('inpainting', {}).get('negative_prompt', 'blurry, distorted')
     strength = args.strength if args.strength is not None else config.config.get('inpainting', {}).get('strength', 0.99)
     guidance_scale = args.guidance_scale if args.guidance_scale is not None else config.config.get('inpainting', {}).get('guidance_scale', 7.5)
     num_steps = args.num_steps if args.num_steps is not None else config.config.get('inpainting', {}).get('num_steps', 50)
