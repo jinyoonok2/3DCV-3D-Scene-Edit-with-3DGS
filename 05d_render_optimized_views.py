@@ -160,9 +160,9 @@ def main():
     
     # Load config
     cfg = ProjectConfig(args.config)
-    data_root = args.data_root or cfg.data_root
-    factor = args.factor if args.factor is not None else cfg.factor
-    test_every = args.test_every if args.test_every is not None else cfg.test_every
+    data_root = args.data_root or cfg.config['paths']['dataset_root']
+    factor = args.factor if args.factor is not None else cfg.config['dataset']['factor']
+    test_every = args.test_every if args.test_every is not None else cfg.config['dataset']['test_every']
     
     set_random_seed(args.seed)
     
