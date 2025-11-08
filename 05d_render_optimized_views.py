@@ -220,8 +220,10 @@ def main():
         data = dataset[idx]
         camtoworld = data["camtoworld"]
         K = data["K"]
-        width = data["width"]
-        height = data["height"]
+        
+        # Get image dimensions from the image tensor
+        image_tensor = data["image"]  # [H, W, 3]
+        height, width = image_tensor.shape[:2]
         
         # Render
         render = render_view(
