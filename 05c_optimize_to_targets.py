@@ -85,7 +85,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def render_view(means, quats, scales, opacities, colors, viewmat, K, width, height):
+def render_view(means, quats, scales, opacities, colors, viewmat, K, width, height, sh_degree=3):
     """Render a single view"""
     renders, alphas, info = rasterization(
         means=means,
@@ -98,7 +98,7 @@ def render_view(means, quats, scales, opacities, colors, viewmat, K, width, heig
         width=width,
         height=height,
         packed=False,
-        sh_degree=None,
+        sh_degree=sh_degree,  # Use SH degree 3 (16 coefficients)
         render_mode="RGB",
     )
     return renders[0], alphas[0], info
