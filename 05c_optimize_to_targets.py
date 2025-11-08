@@ -310,10 +310,7 @@ def main():
         
         # Log
         if (iter_idx + 1) % 100 == 0:
-            if n_after != n_before:
-                console.print(f"  Iter {iter_idx+1}/{iters}: Loss = {loss.item():.4f}, N = {n_after:,} (densified: {n_before:,} → {n_after:,})")
-            else:
-                console.print(f"  Iter {iter_idx+1}/{iters}: Loss = {loss.item():.4f}, N = {n_after:,}")
+            console.print(f"  Iter {iter_idx+1}/{iters}: Loss = {loss.item():.4f}, N = {n_after:,}")
     
     console.print(f"[green]✓ Optimization complete (final loss: {losses[-1]:.4f})[/green]")
     console.print(f"[green]✓ Final Gaussian count: {len(means):,}[/green]")
