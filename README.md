@@ -62,11 +62,21 @@ segmentation:
   text_prompt: "brown plant"
   dino_threshold: 0.3
 roi:
-  threshold: 0.7
+  threshold: 0.01    # ROI weight threshold (lower = more permissive)
 inpainting:
-  prompt: "natural outdoor scene"
-  strength: 0.99
+  removal:
+    roi_threshold: 0.01
+  optimization:
+    iterations: 1000
+    learning_rates:
+      means: 0.00016
+      scales: 0.005
+      quats: 0.001
+      opacities: 0.05
+      sh0: 0.0025
 ```
+
+**Note**: SDXL inpainting parameters are NOT in config - pass via CLI to `05b_inpaint_holes_sdxl.py`
 
 **Usage modes:**
 - Config-only: `python module.py`
@@ -195,34 +205,87 @@ This module uses a robust 3-pass rendering approach to identify holes:
 ---
 
 ### 05b. Inpaint Holes
-Fill holes using SDXL Inpainting.
+Fill holes using LaMa (default) or SDXL Inpainting.
+
+**LaMa Inpainting** (Default - Object Removal):
+- Clean texture continuation without hallucination
+- No prompts needed, fast (~0.5 sec/image)
+- Best for object removal tasks
+
 ```bash
+# Config-based (uses defaults from config.yaml)
 python 05b_inpaint_holes.py
-python 05b_inpaint_holes.py --prompt "lush garden" --strength 0.95
+
+# With parameters (mask processing options)
+python 05b_inpaint_holes.py --mask_blur 8 --mask_dilate 0 --mask_erode 0
 ```
+
+**SDXL Inpainting** (Ablation Study - Creative Inpainting):
+- Text-guided inpainting with creative generation
+- Good for adding new content
+- Slower (~30-60 sec/image), may hallucinate objects
+- **All parameters via CLI** (not in config)
+
+```bash
+python 05b_inpaint_holes_sdxl.py \
+    --model sdxl \
+    --prompt "natural outdoor garden scene with grass and plants" \
+    --negative_prompt "brown plant, dead plant, object, artifact, blur" \
+    --strength 0.99 \
+    --guidance_scale 7.5 \
+    --num_steps 50
+```
+
+**Model Comparison**:
+| Model | Speed | Quality | Hallucination | Use Case |
+|-------|-------|---------|---------------|----------|
+| LaMa | ⚡ Fast (~0.5s) | Clean texture | ✅ None | Object removal |
+| SDXL | 🐌 Slow (~40s) | Creative | ❌ Possible | Content generation |
+
 **Outputs**: `targets/train/`: Inpainted images
-**Time**: ~30-60 sec per view (depends on GPU and num_steps)
+**Time**: 
+- LaMa: ~1-2 min for 161 images
+- SDXL: ~90-120 min for 161 images
 
 ---
 
 ### 05c. Optimize to Targets
-Fine-tune 3DGS to match inpainted targets.
-```bash
-python 05c_optimize_to_targets.py
-python 05c_optimize_to_targets.py --iters 1000 --lr_means 1.6e-4
-```
-**Outputs**: 
-- `ckpt_patched.pt`: Final edited checkpoint
-- `renders/`: Final renders
-- `loss_curve.png`: Training loss plot
+Fine-tune 3DGS to match inpainted targets using L1 loss optimization.
 
-**Time**: ~5-15 min for 1000 iterations
+**Algorithm**:
+1. Load holed checkpoint (from 05a) and inpainted targets (from 05b)
+2. Optimize all Gaussian parameters (means, scales, rotations, opacities, SH colors)
+3. Use same learning rates as initial training for stability
+4. **No densification** (6.4M Gaussians sufficient, avoids CUDA errors)
+5. Render final views after optimization
+
+```bash
+# Config-based (recommended)
+python 05c_optimize_to_targets.py
+
+# Override parameters
+python 05c_optimize_to_targets.py --iters 1000 --lr_means 1.6e-4 --lr_sh0 2.5e-3
+```
+
+**Implementation Details**:
+- Separate Adam optimizers for each parameter type (matches `01_train_gs_initial.py`)
+- Learning rates from config: `means=1.6e-4`, `scales=5e-3`, `quats=1e-3`, `opacities=5e-2`, `sh0=2.5e-3`, `shN=sh0/20`
+- Densification disabled (`use_strategy=False`) for simple parameter optimization
+- Renders all 161 training views at end for verification
+
+**Outputs**: 
+- `ckpt_patched.pt`: Final edited checkpoint (6.4M Gaussians)
+- `renders/train/`: Final rendered views (00000.png - 00160.png)
+- `loss_curve.png`: Training loss plot
+- `manifest.json`: Optimization metadata
+
+**Time**: ~2-3 min for 1000 iterations (RTX 4090)
 
 ---
 
 ## Typical Workflow
 
-**1. Full pipeline with defaults:**
+**1. Full pipeline with defaults (LaMa):**
 ```bash
 source activate.sh
 python init_project.py --scene garden
@@ -232,11 +295,22 @@ python 02_render_training_views.py
 python 03_ground_text_to_masks.py
 python 04a_lift_masks_to_roi3d.py
 python 05a_remove_and_render_holes.py
-python 05b_inpaint_holes.py
+python 05b_inpaint_holes.py          # LaMa (default)
 python 05c_optimize_to_targets.py
 ```
 
-**2. Experiment with different prompts:**
+**2. Pipeline with SDXL inpainting (ablation):**
+```bash
+# Run steps 00-05a same as above
+python 05b_inpaint_holes_sdxl.py \
+    --model sdxl \
+    --prompt "natural outdoor garden scene with grass and plants" \
+    --negative_prompt "brown plant, dead plant, object, artifact, blur" \
+    --strength 0.99
+python 05c_optimize_to_targets.py
+```
+
+**3. Experiment with different prompts:**
 ```bash
 # Edit config.yaml:
 segmentation:
@@ -244,14 +318,14 @@ segmentation:
   
 # Or override:
 python 03_ground_text_to_masks.py --text "red flowers"
-python 05b_inpaint_holes.py --prompt "garden with green grass"
 ```
 
-**3. Fine-tune parameters:**
+**4. Fine-tune parameters:**
 ```bash
 python 01_train_gs_initial.py --iters 50000
 python 03_ground_text_to_masks.py --dino_thresh 0.25 --sam_thresh 0.3
 python 04a_lift_masks_to_roi3d.py --roi_thresh 0.6
+python 05b_inpaint_holes.py --mask_blur 10 --mask_dilate 5
 python 05c_optimize_to_targets.py --iters 2000 --lr_means 2e-4
 ```
 
