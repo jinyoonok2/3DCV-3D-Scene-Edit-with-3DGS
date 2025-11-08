@@ -189,6 +189,7 @@ def main():
     scales = torch.nn.Parameter(params["scales"].clone())
     opacities = torch.nn.Parameter(params["opacities"].clone())
     sh0 = torch.nn.Parameter(params["sh0"].clone())
+    shN = torch.nn.Parameter(params["shN"].clone())  # Keep as parameter for densification, but don't optimize
     
     optimizer = torch.optim.Adam([
         {"params": [means], "lr": lr_means, "name": "means"},
@@ -196,6 +197,7 @@ def main():
         {"params": [scales], "lr": lr_scales, "name": "scales"},
         {"params": [opacities], "lr": lr_opacities, "name": "opacities"},
         {"params": [sh0], "lr": lr_sh0, "name": "sh0"},
+        # Note: shN is not in optimizer, so it won't be updated during training
     ])
     
     # Setup densification strategy
@@ -229,13 +231,16 @@ def main():
         worldtoview = torch.inverse(camtoworld)
         target = targets[idx]
         
+        # Concatenate SH coefficients for rendering
+        colors = torch.cat([sh0, shN], 1)  # [N, K, 3]
+        
         # Render
         render, alpha, info = render_view(
             means=means,
             quats=quats,
             scales=scales,
             opacities=opacities,
-            colors=sh0,
+            colors=colors,
             viewmat=worldtoview,
             K=K,
             width=width,
@@ -276,6 +281,7 @@ def main():
                         "scales": scales,
                         "opacities": opacities,
                         "sh0": sh0,
+                        "shN": shN,
                     },
                     optimizers={"all": optimizer},
                 )
@@ -300,6 +306,7 @@ def main():
         "scales": scales.detach(),
         "opacities": opacities.detach(),
         "sh0": sh0.detach(),
+        "shN": shN.detach(),
     }
     
     final_ckpt = {"splats": final_params}
@@ -308,12 +315,13 @@ def main():
     
     # Render final views
     console.print("[cyan]Rendering final views...[/cyan]")
+    colors_final = torch.cat([sh0, shN], 1)  # Concatenate for rendering
     for idx in tqdm(range(len(dataset)), desc="Rendering"):
         data = dataset[idx]
         camtoworld = data["camtoworld"].to(device)
         K = data["K"].to(device)
-        width = data["width"]
-        height = data["height"]
+        image = data["image"].to(device) / 255.0  # [H, W, 3]
+        height, width = image.shape[:2]
         worldtoview = torch.inverse(camtoworld)
         
         render, _, _ = render_view(
@@ -321,7 +329,7 @@ def main():
             quats=quats,
             scales=scales,
             opacities=opacities,
-            colors=sh0,
+            colors=colors_final,
             viewmat=worldtoview,
             K=K,
             width=width,
