@@ -211,19 +211,25 @@ def main():
     
     # Setup densification strategy (but we'll disable it for this short optimization)
     # With 6.4M Gaussians already, we don't need to add more - just adjust existing ones
-    strategy = DefaultStrategy(
-        prune_opa=0.005,
-        grow_grad2d=densify_grad_thresh,
-        grow_scale3d=0.01,
-        grow_scale2d=0.01,
-        prune_scale3d=0.1,
-        prune_scale2d=0.15,
-        refine_scale2d_stop_iter=0,  # Disable densification by setting stop_iter to 0
-        reset_every=3000,
-        refine_every=100,
-    )
+    # We'll skip strategy calls entirely to avoid CUDA errors
+    use_strategy = False  # Disable strategy for simple parameter optimization
     
-    strategy_state = strategy.initialize_state()
+    if use_strategy:
+        strategy = DefaultStrategy(
+            prune_opa=0.005,
+            grow_grad2d=densify_grad_thresh,
+            grow_scale3d=0.01,
+            grow_scale2d=0.01,
+            prune_scale3d=0.1,
+            prune_scale2d=0.15,
+            refine_scale2d_stop_iter=0,  # Disable densification by setting stop_iter to 0
+            reset_every=3000,
+            refine_every=100,
+        )
+        strategy_state = strategy.initialize_state()
+    else:
+        strategy = None
+        strategy_state = None
     
     # Optimization loop
     console.print("\n[yellow]Optimizing...[/yellow]")
@@ -258,23 +264,23 @@ def main():
             height=height,
         )
         
-        # Pre-backward: collect statistics for densification
-        splats_dict = {
-            "means": means,
-            "quats": quats,
-            "scales": scales,
-            "opacities": opacities,
-            "sh0": sh0,
-            "shN": shN,
-        }
-        
-        strategy.step_pre_backward(
-            params=splats_dict,
-            optimizers=optimizers,
-            state=strategy_state,
-            step=iter_idx,
-            info=info,
-        )
+        # Pre-backward (only if using strategy)
+        if use_strategy:
+            splats_dict = {
+                "means": means,
+                "quats": quats,
+                "scales": scales,
+                "opacities": opacities,
+                "sh0": sh0,
+                "shN": shN,
+            }
+            strategy.step_pre_backward(
+                params=splats_dict,
+                optimizers=optimizers,
+                state=strategy_state,
+                step=iter_idx,
+                info=info,
+            )
         
         # L1 loss
         loss = torch.nn.functional.l1_loss(render, target)
@@ -287,17 +293,20 @@ def main():
             optimizer.step()
         losses.append(loss.item())
         
-        # Post-backward: densification happens here
-        n_before = len(means)
-        strategy.step_post_backward(
-            params=splats_dict,
-            optimizers=optimizers,
-            state=strategy_state,
-            step=iter_idx,
-            info=info,
-            packed=False,
-        )
-        n_after = len(means)
+        # Post-backward (only if using strategy)
+        if use_strategy:
+            n_before = len(means)
+            strategy.step_post_backward(
+                params=splats_dict,
+                optimizers=optimizers,
+                state=strategy_state,
+                step=iter_idx,
+                info=info,
+                packed=False,
+            )
+            n_after = len(means)
+        else:
+            n_after = len(means)
         
         # Log
         if (iter_idx + 1) % 100 == 0:
