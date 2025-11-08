@@ -67,15 +67,9 @@ inpainting:
   removal:
     roi_threshold: 0.01                    # Which Gaussians to delete (lower = more permissive)
     
-  # Module 05b - SDXL Inpainting
-  sdxl:
-    model: "diffusers/stable-diffusion-xl-1.0-inpainting-0.1"
-    prompt: "natural outdoor garden scene with grass and plants"
-    negative_prompt: "brown plant, dead plant, object, artifact, blur"
-    strength: 0.99                         # How much to change (0-1)
-    guidance_scale: 7.5                    # How closely to follow prompt
-    num_inference_steps: 50                # Quality vs speed tradeoff
-    
+  # Module 05b - LaMa Inpainting (default settings)
+  # For SDXL inpainting, use 05b_inpaint_holes_sdxl.py with CLI args
+  
   # Module 05c - Optimization
   optimization:
     iterations: 1000                       # Optimization iterations
