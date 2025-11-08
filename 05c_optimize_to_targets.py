@@ -224,8 +224,8 @@ def main():
         
         camtoworld = data["camtoworld"].to(device)
         K = data["K"].to(device)
-        width = data["width"]
-        height = data["height"]
+        image = data["image"].to(device) / 255.0  # [H, W, 3]
+        height, width = image.shape[:2]
         worldtoview = torch.inverse(camtoworld)
         target = targets[idx]
         
