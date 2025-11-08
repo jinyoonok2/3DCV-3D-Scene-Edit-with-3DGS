@@ -209,7 +209,8 @@ def main():
         "shN": torch.optim.Adam([{"params": shN, "lr": lr_sh0 / 20.0, "name": "shN"}], eps=1e-15),  # Same as training: sh0_lr / 20
     }
     
-    # Setup densification strategy
+    # Setup densification strategy (but we'll disable it for this short optimization)
+    # With 6.4M Gaussians already, we don't need to add more - just adjust existing ones
     strategy = DefaultStrategy(
         prune_opa=0.005,
         grow_grad2d=densify_grad_thresh,
@@ -217,7 +218,7 @@ def main():
         grow_scale2d=0.01,
         prune_scale3d=0.1,
         prune_scale2d=0.15,
-        refine_scale2d_stop_iter=densify_until_iter,
+        refine_scale2d_stop_iter=0,  # Disable densification by setting stop_iter to 0
         reset_every=3000,
         refine_every=100,
     )
