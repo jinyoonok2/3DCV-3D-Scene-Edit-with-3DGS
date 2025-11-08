@@ -198,14 +198,15 @@ def main():
     sh0 = torch.nn.Parameter(params["sh0"].clone())
     shN = torch.nn.Parameter(params["shN"].clone())  # Keep as parameter for densification, but don't optimize
     
-    optimizer = torch.optim.Adam([
-        {"params": [means], "lr": lr_means, "name": "means"},
-        {"params": [quats], "lr": lr_quats, "name": "quats"},
-        {"params": [scales], "lr": lr_scales, "name": "scales"},
-        {"params": [opacities], "lr": lr_opacities, "name": "opacities"},
-        {"params": [sh0], "lr": lr_sh0, "name": "sh0"},
-        # Note: shN is not in optimizer, so it won't be updated during training
-    ])
+    # Create separate optimizers for each parameter (required by DefaultStrategy)
+    optimizers = {
+        "means": torch.optim.Adam([{"params": means, "lr": lr_means, "name": "means"}], eps=1e-15),
+        "quats": torch.optim.Adam([{"params": quats, "lr": lr_quats, "name": "quats"}], eps=1e-15),
+        "scales": torch.optim.Adam([{"params": scales, "lr": lr_scales, "name": "scales"}], eps=1e-15),
+        "opacities": torch.optim.Adam([{"params": opacities, "lr": lr_opacities, "name": "opacities"}], eps=1e-15),
+        "sh0": torch.optim.Adam([{"params": sh0, "lr": lr_sh0, "name": "sh0"}], eps=1e-15),
+        # shN is not optimized, but kept as parameter for densification
+    }
     
     # Setup densification strategy
     strategy = DefaultStrategy(
@@ -267,7 +268,7 @@ def main():
         
         strategy.step_pre_backward(
             params=splats_dict,
-            optimizers={"opt": optimizer},
+            optimizers=optimizers,
             state=strategy_state,
             step=iter_idx,
             info=info,
@@ -276,16 +277,19 @@ def main():
         # L1 loss
         loss = torch.nn.functional.l1_loss(render, target)
         
-        optimizer.zero_grad()
+        # Backward and optimize
+        for optimizer in optimizers.values():
+            optimizer.zero_grad()
         loss.backward()
-        optimizer.step()
+        for optimizer in optimizers.values():
+            optimizer.step()
         losses.append(loss.item())
         
         # Post-backward: densification happens here
         n_before = len(means)
         strategy.step_post_backward(
             params=splats_dict,
-            optimizers={"opt": optimizer},
+            optimizers=optimizers,
             state=strategy_state,
             step=iter_idx,
             info=info,
