@@ -233,10 +233,11 @@ def main():
         
         camtoworld = data["camtoworld"].to(device)
         K = data["K"].to(device)
-        image = data["image"].to(device) / 255.0  # [H, W, 3]
-        height, width = image.shape[:2]
         worldtoview = torch.inverse(camtoworld)
         target = targets[idx]
+        
+        # Get dimensions from target (not from dataset image)
+        height, width = target.shape[:2]
         
         # Concatenate SH coefficients for rendering
         colors = torch.cat([sh0, shN], 1)  # [N, K, 3]
@@ -327,9 +328,11 @@ def main():
         data = dataset[idx]
         camtoworld = data["camtoworld"].to(device)
         K = data["K"].to(device)
-        image = data["image"].to(device) / 255.0  # [H, W, 3]
-        height, width = image.shape[:2]
         worldtoview = torch.inverse(camtoworld)
+        
+        # Get dimensions from target (consistent with training)
+        target = targets[idx]
+        height, width = target.shape[:2]
         
         render, _, _ = render_view(
             means=means,
