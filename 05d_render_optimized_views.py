@@ -147,7 +147,7 @@ def render_view(splats, camtoworld, K, width, height, sh_degree=3, device="cuda"
         packed=False,
         absgrad=True,
         sparse_grad=False,
-        rasterization_mode="classic",
+        rasterize_mode="classic",
         sh_degree=sh_degree,
     )
     
