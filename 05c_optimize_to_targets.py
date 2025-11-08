@@ -196,16 +196,17 @@ def main():
     scales = torch.nn.Parameter(params["scales"].clone())
     opacities = torch.nn.Parameter(params["opacities"].clone())
     sh0 = torch.nn.Parameter(params["sh0"].clone())
-    shN = torch.nn.Parameter(params["shN"].clone(), requires_grad=False)  # Not optimized, just for densification
+    shN = torch.nn.Parameter(params["shN"].clone())  # Also optimized, like in training code
     
     # Create separate optimizers for each parameter (required by DefaultStrategy)
+    # Match the training code exactly
     optimizers = {
         "means": torch.optim.Adam([{"params": means, "lr": lr_means, "name": "means"}], eps=1e-15),
         "quats": torch.optim.Adam([{"params": quats, "lr": lr_quats, "name": "quats"}], eps=1e-15),
         "scales": torch.optim.Adam([{"params": scales, "lr": lr_scales, "name": "scales"}], eps=1e-15),
         "opacities": torch.optim.Adam([{"params": opacities, "lr": lr_opacities, "name": "opacities"}], eps=1e-15),
         "sh0": torch.optim.Adam([{"params": sh0, "lr": lr_sh0, "name": "sh0"}], eps=1e-15),
-        # shN has requires_grad=False, so no optimizer needed
+        "shN": torch.optim.Adam([{"params": shN, "lr": lr_sh0 / 20.0, "name": "shN"}], eps=1e-15),  # Same as training: sh0_lr / 20
     }
     
     # Setup densification strategy
