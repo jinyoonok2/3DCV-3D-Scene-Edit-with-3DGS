@@ -87,19 +87,26 @@ def parse_args():
 
 def render_view(means, quats, scales, opacities, colors, viewmat, K, width, height, sh_degree=3):
     """Render a single view"""
+    # Apply activations to parameters (like in training code)
+    scales_activated = torch.exp(scales)
+    opacities_activated = torch.sigmoid(opacities)
+    
     renders, alphas, info = rasterization(
         means=means,
         quats=quats,
-        scales=scales,
-        opacities=opacities,
+        scales=scales_activated,
+        opacities=opacities_activated,
         colors=colors,
         viewmats=viewmat[None],
         Ks=K[None],
         width=width,
         height=height,
+        sh_degree=sh_degree,
         packed=False,
-        sh_degree=sh_degree,  # Use SH degree 3 (16 coefficients)
-        render_mode="RGB",
+        absgrad=True,
+        sparse_grad=False,
+        rasterize_mode="classic",
+        camera_model="pinhole",
     )
     return renders[0], alphas[0], info
 
