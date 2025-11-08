@@ -107,7 +107,7 @@ def render_view(means, quats, scales, opacities, colors, viewmat, K, width, heig
 def load_targets(targets_dir, device):
     """Load all target images"""
     targets = []
-    img_files = sorted((targets_dir / "train").glob("*.png"))
+    img_files = sorted(targets_dir.glob("*.png"))
     
     console.print(f"[cyan]Loading {len(img_files)} target images...[/cyan]")
     for img_path in img_files:
