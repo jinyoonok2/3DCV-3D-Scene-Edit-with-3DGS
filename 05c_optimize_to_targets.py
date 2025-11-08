@@ -196,7 +196,7 @@ def main():
     scales = torch.nn.Parameter(params["scales"].clone())
     opacities = torch.nn.Parameter(params["opacities"].clone())
     sh0 = torch.nn.Parameter(params["sh0"].clone())
-    shN = torch.nn.Parameter(params["shN"].clone())  # Keep as parameter for densification, but don't optimize
+    shN = torch.nn.Parameter(params["shN"].clone(), requires_grad=False)  # Not optimized, just for densification
     
     # Create separate optimizers for each parameter (required by DefaultStrategy)
     optimizers = {
@@ -205,7 +205,7 @@ def main():
         "scales": torch.optim.Adam([{"params": scales, "lr": lr_scales, "name": "scales"}], eps=1e-15),
         "opacities": torch.optim.Adam([{"params": opacities, "lr": lr_opacities, "name": "opacities"}], eps=1e-15),
         "sh0": torch.optim.Adam([{"params": sh0, "lr": lr_sh0, "name": "sh0"}], eps=1e-15),
-        # shN is not optimized, but kept as parameter for densification
+        # shN has requires_grad=False, so no optimizer needed
     }
     
     # Setup densification strategy
