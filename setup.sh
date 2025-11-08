@@ -69,8 +69,23 @@ else
     echo ""
 fi
 
+# Install system dependencies for Pillow (if running with sudo/root)
+echo "4. Installing system dependencies..."
+if [ "$EUID" -eq 0 ] || sudo -n true 2>/dev/null; then
+    echo "  Installing Pillow build dependencies..."
+    sudo apt-get update -qq && sudo apt-get install -y -qq \
+        libjpeg-dev zlib1g-dev libtiff-dev libfreetype6-dev \
+        liblcms2-dev libwebp-dev libharfbuzz-dev libfribidi-dev libxcb1-dev
+    echo "✓ System dependencies installed"
+else
+    echo "⚠ Skipping system dependencies (no sudo access)"
+    echo "  If Pillow installation fails, run:"
+    echo "  sudo apt-get install -y libjpeg-dev zlib1g-dev libtiff-dev libfreetype6-dev liblcms2-dev libwebp-dev libharfbuzz-dev libfribidi-dev libxcb1-dev"
+fi
+echo ""
+
 # Verify Python and CUDA
-echo "4. Verifying environment..."
+echo "5. Verifying environment..."
 python --version
 echo ""
 
@@ -88,7 +103,7 @@ else
 fi
 
 # Install gsplat
-echo "5. Installing gsplat..."
+echo "6. Installing gsplat..."
 if python -c "import gsplat" 2>/dev/null; then
     echo "✓ gsplat already installed"
 else
@@ -99,7 +114,7 @@ fi
 echo ""
 
 # Clone gsplat repository for examples
-echo "6. Setting up gsplat examples..."
+echo "7. Setting up gsplat examples..."
 if [ ! -d "gsplat-src" ]; then
     git clone https://github.com/nerfstudio-project/gsplat.git gsplat-src
     echo "✓ gsplat repository cloned"
@@ -109,7 +124,7 @@ fi
 echo ""
 
 # Install project requirements (includes dependencies for gsplat examples)
-echo "7. Installing project requirements..."
+echo "8. Installing project requirements..."
 if [ -f "requirements.txt" ]; then
     pip install -r requirements.txt
     echo "✓ Project requirements installed"
@@ -119,7 +134,7 @@ fi
 echo ""
 
 # Install gsplat examples requirements (after PyTorch is confirmed)
-echo "8. Installing gsplat examples requirements..."
+echo "9. Installing gsplat examples requirements..."
 if [ -f "gsplat-src/examples/requirements.txt" ]; then
     # fused-ssim needs torch during build, so use --no-build-isolation
     echo "  Note: Using --no-build-isolation for packages that need torch during build"
@@ -129,7 +144,7 @@ fi
 echo ""
 
 # Install SAM2 from GitHub
-echo "9. Installing SAM2..."
+echo "10. Installing SAM2..."
 if python -c "import sam2" 2>/dev/null; then
     echo "✓ SAM2 already installed"
 else
@@ -139,7 +154,7 @@ fi
 echo ""
 
 # Clone GroundingDINO repository for config files
-echo "10. Setting up GroundingDINO..."
+echo "11. Setting up GroundingDINO..."
 if [ ! -d "GroundingDINO" ]; then
     git clone https://github.com/IDEA-Research/GroundingDINO.git
     echo "✓ GroundingDINO repository cloned (for config files)"
@@ -149,7 +164,7 @@ fi
 echo ""
 
 # Install 3D Inpainting Pipeline dependencies
-echo "11. Installing 3D Inpainting Pipeline models..."
+echo "12. Installing 3D Inpainting Pipeline models..."
 echo "  (TripoSR, Depth Anything v2, CLIP)"
 
 # TripoSR for Image-to-3D (Module 06)
@@ -177,7 +192,7 @@ fi
 echo ""
 
 # Download model weights
-echo "12. Downloading model weights..."
+echo "13. Downloading model weights..."
 if [ ! -f "models/groundingdino_swint_ogc.pth" ] || [ ! -f "models/sam2_hiera_large.pt" ]; then
     chmod +x download_models.sh
     ./download_models.sh
@@ -188,7 +203,7 @@ fi
 echo ""
 
 # Download dataset (optional)
-echo "13. Checking for dataset..."
+echo "14. Checking for dataset..."
 if [ ! -d "datasets/360_v2/garden" ]; then
     read -p "Download Mip-NeRF 360 garden dataset (~2.5GB)? [y/N] " -n 1 -r
     echo

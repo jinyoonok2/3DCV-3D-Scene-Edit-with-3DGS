@@ -74,6 +74,21 @@ echo "4. Verifying environment..."
 python --version
 echo ""
 
+# Install system dependencies for Pillow
+echo "5. Installing system dependencies..."
+if [ "$EUID" -eq 0 ] || sudo -n true 2>/dev/null; then
+    echo "  Installing Pillow build dependencies..."
+    sudo apt-get update -qq && sudo apt-get install -y -qq \
+        libjpeg-dev zlib1g-dev libtiff-dev libfreetype6-dev \
+        liblcms2-dev libwebp-dev libharfbuzz-dev libfribidi-dev libxcb1-dev
+    echo "✓ System dependencies installed"
+else
+    echo "⚠ Skipping system dependencies (no sudo access)"
+    echo "  If Pillow installation fails, run:"
+    echo "  sudo apt-get install -y libjpeg-dev zlib1g-dev libtiff-dev libfreetype6-dev liblcms2-dev libwebp-dev libharfbuzz-dev libfribidi-dev libxcb1-dev"
+fi
+echo ""
+
 # Check CUDA availability
 if command -v nvidia-smi &> /dev/null; then
     echo "GPU Information:"
@@ -82,7 +97,7 @@ if command -v nvidia-smi &> /dev/null; then
 fi
 
 # Install PyTorch with CUDA 12.6
-echo "5. Installing PyTorch with CUDA 12.6..."
+echo "6. Installing PyTorch with CUDA 12.6..."
 if python -c "import torch" 2>/dev/null; then
     echo "PyTorch already installed:"
     python -c "import torch; print(f'  PyTorch: {torch.__version__}'); print(f'  CUDA available: {torch.cuda.is_available()}'); print(f'  CUDA version: {torch.version.cuda if torch.cuda.is_available() else \"N/A\"}'); print(f'  GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"N/A\"}')"
@@ -96,12 +111,12 @@ else
 fi
 
 # Verify CUDA after PyTorch installation
-echo "6. Verifying CUDA availability..."
+echo "7. Verifying CUDA availability..."
 python -c "import torch; assert torch.cuda.is_available(), 'CUDA not available!'; print(f'✓ CUDA is available'); print(f'  Device: {torch.cuda.get_device_name(0)}'); print(f'  CUDA Version: {torch.version.cuda}'); print(f'  Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB')"
 echo ""
 
 # Install gsplat from PyPI
-echo "7. Installing gsplat..."
+echo "8. Installing gsplat..."
 if python -c "import gsplat" 2>/dev/null; then
     echo "✓ gsplat already installed:"
     python -c "import gsplat; print(f'  Version: {gsplat.__version__}')"
@@ -113,7 +128,7 @@ fi
 echo ""
 
 # Clone gsplat repository for examples (needed for requirements.txt)
-echo "8. Setting up gsplat examples repository..."
+echo "9. Setting up gsplat examples repository..."
 if [ ! -d "gsplat-src" ]; then
     echo "  Cloning gsplat repository..."
     git clone https://github.com/nerfstudio-project/gsplat.git gsplat-src
@@ -124,7 +139,7 @@ fi
 echo ""
 
 # Install project requirements first (lighter weight dependencies)
-echo "9. Installing project requirements..."
+echo "10. Installing project requirements..."
 if [ -f "requirements.txt" ]; then
     pip install -r requirements.txt
     echo "✓ Project requirements installed"
@@ -134,7 +149,7 @@ fi
 echo ""
 
 # Install gsplat examples requirements (for dataset download tools)
-echo "10. Installing gsplat examples requirements..."
+echo "11. Installing gsplat examples requirements..."
 if [ -f "gsplat-src/examples/requirements.txt" ]; then
     echo "  Note: Using --no-build-isolation for packages that need torch during build"
     echo "  This may take a few minutes..."
@@ -144,7 +159,7 @@ fi
 echo ""
 
 # Clone GroundingDINO repository for config files
-echo "11. Setting up GroundingDINO..."
+echo "12. Setting up GroundingDINO..."
 if [ ! -d "GroundingDINO" ]; then
     git clone https://github.com/IDEA-Research/GroundingDINO.git
     echo "✓ GroundingDINO repository cloned (for config files)"
@@ -154,7 +169,7 @@ fi
 echo ""
 
 # Install SAM2 from GitHub
-echo "12. Installing SAM2..."
+echo "13. Installing SAM2..."
 if python -c "import sam2" 2>/dev/null; then
     echo "✓ SAM2 already installed"
 else
@@ -164,7 +179,7 @@ fi
 echo ""
 
 # Install 3D Inpainting Pipeline dependencies
-echo "13. Installing 3D Inpainting Pipeline models..."
+echo "14. Installing 3D Inpainting Pipeline models..."
 echo "  (TripoSR, Depth Anything v2, CLIP)"
 
 # TripoSR for Image-to-3D (Module 06)
@@ -192,7 +207,7 @@ fi
 echo ""
 
 # Download model weights
-echo "14. Downloading model weights..."
+echo "15. Downloading model weights..."
 if [ ! -f "models/groundingdino_swint_ogc.pth" ] || [ ! -f "models/sam2_hiera_large.pt" ]; then
     echo "  Running download_models.sh..."
     chmod +x download_models.sh
@@ -205,7 +220,7 @@ fi
 echo ""
 
 # Final verification
-echo "15. Final verification..."
+echo "16. Final verification..."
 echo "  Testing imports..."
 python -c "
 import torch
@@ -221,7 +236,7 @@ print('  SAM2: OK')
 echo ""
 
 # Download dataset
-echo "16. Checking for dataset..."
+echo "17. Checking for dataset..."
 if [ ! -d "datasets/360_v2/garden" ]; then
     echo "  Downloading Mip-NeRF 360 garden dataset (~2.5GB)..."
     cd gsplat-src/examples
