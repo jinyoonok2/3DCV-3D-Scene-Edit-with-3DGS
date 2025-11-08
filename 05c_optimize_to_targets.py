@@ -255,52 +255,50 @@ def main():
             height=height,
         )
         
+        # Pre-backward: collect statistics for densification
+        splats_dict = {
+            "means": means,
+            "quats": quats,
+            "scales": scales,
+            "opacities": opacities,
+            "sh0": sh0,
+            "shN": shN,
+        }
+        
+        strategy.step_pre_backward(
+            params=splats_dict,
+            optimizers={"opt": optimizer},
+            state=strategy_state,
+            step=iter_idx,
+            info=info,
+        )
+        
         # L1 loss
         loss = torch.nn.functional.l1_loss(render, target)
         
         optimizer.zero_grad()
         loss.backward()
-        
-        # Store gradients for densification
-        if densify_from_iter <= iter_idx < densify_until_iter:
-            if info["means2d"].grad is not None:
-                strategy_state = strategy.collect_statistics(
-                    iter=iter_idx,
-                    state=strategy_state,
-                    params={"means2d": info["means2d"]},
-                    optimizers={"means2d": optimizer},
-                )
-        
         optimizer.step()
         losses.append(loss.item())
         
-        # Densification
-        if densify_from_iter <= iter_idx < densify_until_iter:
-            if iter_idx % 100 == 0:
-                n_before = len(means)
-                
-                # Apply densification
-                strategy_state = strategy.step(
-                    iter=iter_idx,
-                    state=strategy_state,
-                    params={
-                        "means": means,
-                        "quats": quats,
-                        "scales": scales,
-                        "opacities": opacities,
-                        "sh0": sh0,
-                        "shN": shN,
-                    },
-                    optimizers={"all": optimizer},
-                )
-                
-                n_after = len(means)
-                if n_after != n_before:
-                    console.print(f"  Iter {iter_idx}: Densified {n_before:,} → {n_after:,} Gaussians")
+        # Post-backward: densification happens here
+        n_before = len(means)
+        strategy.step_post_backward(
+            params=splats_dict,
+            optimizers={"opt": optimizer},
+            state=strategy_state,
+            step=iter_idx,
+            info=info,
+            packed=False,
+        )
+        n_after = len(means)
         
         # Log
         if (iter_idx + 1) % 100 == 0:
-            console.print(f"  Iter {iter_idx+1}/{args.iters}: Loss = {loss.item():.4f}, N = {len(means):,}")
+            if n_after != n_before:
+                console.print(f"  Iter {iter_idx+1}/{iters}: Loss = {loss.item():.4f}, N = {n_after:,} (densified: {n_before:,} → {n_after:,})")
+            else:
+                console.print(f"  Iter {iter_idx+1}/{iters}: Loss = {loss.item():.4f}, N = {n_after:,}")
     
     console.print(f"[green]✓ Optimization complete (final loss: {losses[-1]:.4f})[/green]")
     console.print(f"[green]✓ Final Gaussian count: {len(means):,}[/green]")
