@@ -508,23 +508,23 @@ def main():
         )
         print(f"✓ Initialized: {len(splats['means'])} Gaussians from SfM points")
         print()
-            
-            # Train
-            print("Starting training...")
-            trainloader = torch.utils.data.DataLoader(
-                trainset,
-                batch_size=args.batch_size,
-                shuffle=True,
-                num_workers=4,
-                persistent_workers=True,
-                pin_memory=True,
-            )
-            
-            train(iters, sh_degree, splats, optimizers, trainloader, parser_obj, device, output_dir, ssim_lambda)
-            
-            # Save checkpoint
-            print(f"\nSaving checkpoint to: {ckpt_path}")
-            torch.save({"step": iters, "splats": splats.state_dict()}, ckpt_path)
+        
+        # Train
+        print("Starting training...")
+        trainloader = torch.utils.data.DataLoader(
+            trainset,
+            batch_size=args.batch_size,
+            shuffle=True,
+            num_workers=4,
+            persistent_workers=True,
+            pin_memory=True,
+        )
+        
+        train(iters, sh_degree, splats, optimizers, trainloader, parser_obj, device, output_dir, ssim_lambda)
+        
+        # Save checkpoint
+        print(f"\nSaving checkpoint to: {ckpt_path}")
+        torch.save({"step": iters, "splats": splats.state_dict()}, ckpt_path)
     else:
         # Train from scratch
         splats, optimizers = create_splats_with_optimizers(
