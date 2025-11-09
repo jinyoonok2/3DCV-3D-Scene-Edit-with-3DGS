@@ -159,22 +159,35 @@ def load_masks(masks_root, image_names):
     
     for img_name in image_names:
         # Try different filename patterns and extensions
+        mask_file = None
         for prefix in ["mask_", ""]:
             for ext in [".npy", ".png"]:
-                mask_file = masks_path / f"{prefix}{img_name}{ext}"
-                if mask_file.exists():
-                    if ext == ".npy":
-                        mask = np.load(mask_file)
-                    else:
-                        mask = np.array(Image.open(mask_file))
-                        if mask.ndim == 3:
-                            mask = mask[:, :, 0]  # Grayscale
-                        mask = mask.astype(np.float32) / 255.0
-                    
-                    masks[img_name] = mask
+                # First try exact match
+                candidate = masks_path / f"{prefix}{img_name}{ext}"
+                if candidate.exists():
+                    mask_file = candidate
                     break
-            if img_name in masks:
+                
+                # Then try pattern with instance suffix: mask_{img_name}_*{ext}
+                pattern = f"{prefix}{img_name}_*{ext}"
+                matches = sorted(masks_path.glob(pattern))
+                if matches:
+                    mask_file = matches[0]  # Take first (typically _0)
+                    break
+            
+            if mask_file is not None:
                 break
+        
+        if mask_file is not None:
+            if mask_file.suffix == ".npy":
+                mask = np.load(mask_file)
+            else:
+                mask = np.array(Image.open(mask_file))
+                if mask.ndim == 3:
+                    mask = mask[:, :, 0]  # Grayscale
+                mask = mask.astype(np.float32) / 255.0
+            
+            masks[img_name] = mask
     
     print(f"✓ Loaded {len(masks)} masks")
     return masks
