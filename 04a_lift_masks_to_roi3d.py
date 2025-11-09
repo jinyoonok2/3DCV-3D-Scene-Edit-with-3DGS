@@ -172,12 +172,21 @@ def load_masks(masks_root, image_names):
     missing = 0
     
     for img_name in image_names:
-        # Try different extensions
+        # Try different extensions and patterns
         mask_path = None
         for ext in [".npy", ".png", ".jpg"]:
+            # First try exact match: mask_{img_name}{ext}
             candidate = masks_root / f"mask_{img_name}{ext}"
             if candidate.exists():
                 mask_path = candidate
+                break
+            
+            # Then try pattern with instance suffix: mask_{img_name}_*{ext}
+            # (for cases where SAM generated multiple masks, we take the first one)
+            pattern = f"mask_{img_name}_*{ext}"
+            matches = sorted(masks_root.glob(pattern))
+            if matches:
+                mask_path = matches[0]  # Take first (typically _0)
                 break
         
         if mask_path is None:
