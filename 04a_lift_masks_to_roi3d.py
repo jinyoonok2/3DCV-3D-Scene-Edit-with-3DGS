@@ -295,7 +295,7 @@ def compute_roi_weights_voting(splats, dataset, masks, sh_degree=3, device="cuda
     # Process each view
     for idx in tqdm(range(len(dataset)), desc="Processing views"):
         data = dataset[idx]
-        img_name = f"view_{idx:03d}"
+        img_name = f"{idx:05d}"
         
         if img_name not in masks:
             continue
@@ -489,7 +489,7 @@ def main():
     num_gaussians = splats["means"].shape[0]
     
     # Load masks
-    image_names = [f"view_{i:03d}" for i in range(len(dataset))]
+    image_names = [f"{i:05d}" for i in range(len(dataset))]
     masks = load_masks(masks_root, image_names)
     print()
     

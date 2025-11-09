@@ -211,7 +211,7 @@ def project_roi_to_masks(splats, roi_weights, dataset, sh_degree=3, device="cuda
     
     for idx in tqdm(range(len(dataset)), desc="Rendering views"):
         data = dataset[idx]
-        img_name = f"view_{idx:03d}"
+        img_name = f"{idx:05d}"
         
         camtoworld = data["camtoworld"].unsqueeze(0).to(device)
         K = data["K"].unsqueeze(0).to(device)
@@ -354,7 +354,7 @@ def main():
     print()
     
     # Load masks
-    image_names = [f"view_{i:03d}" for i in range(len(dataset))]
+    image_names = [f"{i:05d}" for i in range(len(dataset))]
     masks = load_masks(masks_root, image_names)
     print()
     
@@ -374,7 +374,7 @@ def main():
     # Compute IoU with SAM masks
     ious = []
     for idx in range(num_views_to_render):
-        img_name = f"view_{idx:03d}"
+        img_name = f"{idx:05d}"
         
         if img_name not in masks or img_name not in projected_masks:
             continue
@@ -407,7 +407,7 @@ def main():
         "num_views_rendered": len(projected_masks),
         "num_views_with_iou": len(ious),
         "mean_iou": float(mean_iou),
-        "iou_per_view": {f"view_{i:03d}": float(iou) for i, iou in enumerate(ious)},
+        "iou_per_view": {f"{i:05d}": float(iou) for i, iou in enumerate(ious)},
         "roi_stats": {
             "num_gaussians": num_gaussians,
             "num_roi_gaussians": int(num_roi),

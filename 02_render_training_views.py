@@ -291,8 +291,8 @@ def main():
             image = colors.squeeze(0).cpu().numpy()
             image = (image * 255).astype(np.uint8)
             
-            # Save render with split-specific path
-            output_path = split_output_dir / f"view_{idx:03d}.png"
+            # Save render with split-specific path (use 5-digit format: 00000.png)
+            output_path = split_output_dir / f"{idx:05d}.png"
             imageio.imwrite(output_path, image)
             all_rendered_paths.append(str(output_path))
             
