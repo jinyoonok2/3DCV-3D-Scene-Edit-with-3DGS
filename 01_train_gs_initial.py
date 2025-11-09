@@ -499,15 +499,15 @@ def main():
         print(f"Found existing checkpoint: {ckpt_path}")
         print("Retraining from scratch (use --resume to load existing checkpoint)")
         # Train from scratch
-            splats, optimizers = create_splats_with_optimizers(
-                parser_obj,
-                scene_scale=parser_obj.scene_scale * 1.1,
-                sh_degree=args.sh_degree,
-                batch_size=args.batch_size,
-                device=device,
-            )
-            print(f"✓ Initialized: {len(splats['means'])} Gaussians from SfM points")
-            print()
+        splats, optimizers = create_splats_with_optimizers(
+            parser_obj,
+            scene_scale=parser_obj.scene_scale * 1.1,
+            sh_degree=args.sh_degree,
+            batch_size=args.batch_size,
+            device=device,
+        )
+        print(f"✓ Initialized: {len(splats['means'])} Gaussians from SfM points")
+        print()
             
             # Train
             print("Starting training...")
