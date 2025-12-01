@@ -123,8 +123,11 @@ if python -c "import gsplat" 2>/dev/null; then
     python -c "import gsplat; print(f'  Version: {gsplat.__version__}')"
 else
     echo "  Compiling CUDA kernels (this may take a few minutes)..."
-    pip install gsplat
-    echo "✓ gsplat installed"
+    # Install gsplat without fused-ssim to avoid build issues
+    pip install gsplat --no-deps
+    # Then install gsplat dependencies manually (excluding fused-ssim)
+    pip install numpy jaxtyping typing_extensions
+    echo "✓ gsplat installed (fused-ssim skipped - optional dependency)"
 fi
 echo ""
 
