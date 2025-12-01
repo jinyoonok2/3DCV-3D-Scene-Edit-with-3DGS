@@ -325,24 +325,31 @@ python 03_ground_text_to_masks.py  # Segment "brown plant"
 python 04a_lift_masks_to_roi3d.py  # Get 3D location of plant
 python 05a_remove_and_render_holes.py  # Remove plant
 python 05b_inpaint_holes.py  # Fill the hole with background
+python 05c_optimize_to_targets.py  # Optimize inpainted scene
 
 # Step 6: Generate new 3D object (e.g., "red flower in pot")
 # [Module 06 - Object Generation]
-# - Uses TripoSR to generate 3D mesh from text/image
-# - Converts mesh to 3D Gaussian representation
-# - Output: generated_object.pt (Gaussian parameters)
+# - Uses TripoSR to generate 3D mesh from text/image prompt
+# - Removes background, previews the mesh
+# - Output: mesh.ply (3D mesh file)
 
-# Step 7: Place object at original ROI location
-# [Module 07 - Object Placement]
+# Step 7: Convert mesh to Gaussians
+# [Module 07 - Mesh to Gaussians Conversion]
+# - Samples points from mesh surface
+# - Initializes Gaussian parameters (positions, scales, colors)
+# - Output: gaussians.pt (Gaussian representation of object)
+
+# Step 8: Place object at original ROI location
+# [Module 08 - Object Placement]
 # - Loads roi.pt from 04a (has 3D position/bounds)
 # - Transforms generated Gaussians to match ROI center/scale
-# - Merges with inpainted scene from 05b
+# - Merges with inpainted scene from 05c
 # - Output: scene_with_new_object.pt
 
-# Step 8: Optimize combined scene
-# [Module 08 - Final Optimization]  
+# Step 9: Final optimization
+# [Module 09 - Final Optimization]  
 # - Fine-tune merged Gaussians to match lighting/appearance
-# - Use similar optimization as 05c but with blending weights
+# - Use similar optimization as 05c but for complete scene
 # - Output: final_edited_scene.pt
 ```
 
@@ -351,9 +358,17 @@ python 05b_inpaint_holes.py  # Fill the hole with background
 | Task | Modules | Output |
 |------|---------|--------|
 | **Object Removal** | 00-05c | Scene with object removed |
-| **Object Replacement** | 00-05b → 06-08 | Scene with new object at same location |
+| **Object Replacement** | 00-05c → 06-09 | Scene with new object at same location |
 
 **Key Insight**: The ROI from Module 04a provides the 3D spatial location for placing the new object. By using the same ROI coordinates, we ensure the generated object appears at exactly the same position as the removed one.
+
+**Pipeline Flow**:
+```
+Text/Image → [06: Generate Mesh] → mesh.ply
+          → [07: Mesh to Gaussians] → gaussians.pt
+          → [08: Place at ROI] → merged scene
+          → [09: Optimize] → final result
+```
 
 **4. Experiment with different prompts:**
 ```bash
