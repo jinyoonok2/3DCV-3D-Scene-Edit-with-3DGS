@@ -235,6 +235,16 @@ def merge_gaussians(scene_gaussians, object_gaussians):
     """Merge object Gaussians with scene Gaussians."""
     console.print("\nMerging object with scene...")
     
+    # Debug: print shapes
+    console.print("Scene Gaussian shapes:")
+    for k in ["means", "quats", "scales", "sh0", "shN", "opacities"]:
+        if k in scene_gaussians:
+            console.print(f"  {k}: {scene_gaussians[k].shape}")
+    console.print("Object Gaussian shapes:")
+    for k in ["means", "quats", "scales", "sh0", "shN", "opacities"]:
+        if k in object_gaussians:
+            console.print(f"  {k}: {object_gaussians[k].shape}")
+    
     # Concatenate all parameters
     merged = {}
     for key in ["means", "quats", "scales", "sh0", "shN", "opacities"]:
