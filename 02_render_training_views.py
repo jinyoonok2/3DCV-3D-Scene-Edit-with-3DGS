@@ -111,8 +111,14 @@ def load_checkpoint(ckpt_path, device="cuda"):
     print(f"Loading checkpoint from: {ckpt_path}")
     checkpoint = torch.load(ckpt_path, map_location=device)
     
-    # Extract splats
-    splats = checkpoint["splats"]
+    # Extract splats (handle different checkpoint formats)
+    if "splats" in checkpoint:
+        splats = checkpoint["splats"]
+    elif "gaussians" in checkpoint:
+        splats = checkpoint["gaussians"]
+    else:
+        # Assume checkpoint is the splats dict directly
+        splats = checkpoint
     
     # Convert to torch parameters
     splats_dict = {}
