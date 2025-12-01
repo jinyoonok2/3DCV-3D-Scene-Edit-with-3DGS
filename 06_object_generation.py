@@ -27,9 +27,13 @@ Dependencies:
 
 import argparse
 import json
+import os
+import re
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlparse
 
 import numpy as np
 import torch
@@ -83,7 +87,7 @@ def parse_args():
     parser.add_argument(
         "--image",
         type=str,
-        help="Path to input image (alternative to text prompt)",
+        help="Path or URL to input image (supports Google Drive links, direct URLs, or local paths)",
     )
     parser.add_argument(
         "--output_dir",
@@ -116,6 +120,58 @@ def parse_args():
     )
     
     return parser.parse_args()
+
+
+def download_image_from_url(url, output_path=None):
+    """Download image from URL (supports Google Drive, direct URLs)."""
+    import subprocess
+    
+    # Check if it's a Google Drive link
+    gdrive_patterns = [
+        r'drive\.google\.com/file/d/([a-zA-Z0-9_-]+)',
+        r'drive\.google\.com/uc\?id=([a-zA-Z0-9_-]+)',
+    ]
+    
+    file_id = None
+    for pattern in gdrive_patterns:
+        match = re.search(pattern, url)
+        if match:
+            file_id = match.group(1)
+            break
+    
+    if file_id:
+        # Google Drive link
+        console.print(f"Detected Google Drive link, downloading...")
+        if output_path is None:
+            output_path = tempfile.mktemp(suffix='.jpg')
+        
+        try:
+            # Use gdown to download
+            cmd = ['gdown', f'https://drive.google.com/uc?id={file_id}', '-O', output_path]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                console.print(f"[red]Error downloading from Google Drive: {result.stderr}[/red]")
+                sys.exit(1)
+            console.print(f"✓ Downloaded from Google Drive to {output_path}")
+            return output_path
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+            console.print("Make sure gdown is installed: pip install gdown")
+            sys.exit(1)
+    else:
+        # Regular URL
+        console.print(f"Downloading image from URL...")
+        if output_path is None:
+            output_path = tempfile.mktemp(suffix='.jpg')
+        
+        try:
+            import urllib.request
+            urllib.request.urlretrieve(url, output_path)
+            console.print(f"✓ Downloaded to {output_path}")
+            return output_path
+        except Exception as e:
+            console.print(f"[red]Error downloading from URL: {e}[/red]")
+            sys.exit(1)
 
 
 def load_and_preprocess_image(image_path, remove_bg=True, foreground_ratio=0.85):
@@ -237,7 +293,13 @@ def main():
     
     # Get input image
     if args.image:
-        image_path = args.image
+        # Check if it's a URL or local path
+        if args.image.startswith('http://') or args.image.startswith('https://') or 'drive.google.com' in args.image:
+            # Download from URL
+            image_path = download_image_from_url(args.image)
+        else:
+            # Local path
+            image_path = args.image
     elif args.prompt:
         console.print("[red]Error: Text-to-image generation not yet implemented![/red]")
         console.print("Please provide an image with --image")
