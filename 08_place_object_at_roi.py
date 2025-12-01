@@ -249,10 +249,28 @@ def merge_gaussians(scene_gaussians, object_gaussians):
     merged = {}
     for key in ["means", "quats", "scales", "sh0", "shN", "opacities"]:
         if key in scene_gaussians and key in object_gaussians:
-            # Handle shN which might be empty
-            if key == "shN":
-                scene_shN = scene_gaussians[key] if scene_gaussians[key].numel() > 0 else torch.zeros(len(scene_gaussians["means"]), 0, 3)
-                object_shN = object_gaussians[key] if object_gaussians[key].numel() > 0 else torch.zeros(len(object_gaussians["means"]), 0, 3)
+            scene_val = scene_gaussians[key]
+            object_val = object_gaussians[key]
+            
+            # Fix shape mismatches
+            if key == "sh0":
+                # Scene: [N, 1, 3], Object might be: [N, 3]
+                if scene_val.ndim == 3 and object_val.ndim == 2:
+                    object_val = object_val.unsqueeze(1)  # [N, 3] -> [N, 1, 3]
+                elif scene_val.ndim == 2 and object_val.ndim == 3:
+                    scene_val = scene_val.unsqueeze(1)
+            
+            elif key == "opacities":
+                # Scene might be: [N], Object might be: [N, 1]
+                if scene_val.ndim == 1 and object_val.ndim == 2:
+                    object_val = object_val.squeeze(-1)  # [N, 1] -> [N]
+                elif scene_val.ndim == 2 and object_val.ndim == 1:
+                    scene_val = scene_val.squeeze(-1)
+            
+            # Handle shN which might have different number of bands
+            elif key == "shN":
+                scene_shN = scene_val if scene_val.numel() > 0 else torch.zeros(len(scene_gaussians["means"]), 0, 3)
+                object_shN = object_val if object_val.numel() > 0 else torch.zeros(len(object_gaussians["means"]), 0, 3)
                 
                 # Make sure both have same number of SH bands
                 if scene_shN.shape[1] != object_shN.shape[1]:
@@ -268,9 +286,10 @@ def merge_gaussians(scene_gaussians, object_gaussians):
                             torch.zeros(object_shN.shape[0], max_bands - object_shN.shape[1], 3)
                         ], dim=1)
                 
-                merged[key] = torch.cat([scene_gaussians[key], object_shN], dim=0)
-            else:
-                merged[key] = torch.cat([scene_gaussians[key], object_gaussians[key]], dim=0)
+                merged[key] = torch.cat([scene_shN, object_shN], dim=0)
+                continue
+            
+            merged[key] = torch.cat([scene_val, object_val], dim=0)
     
     num_scene = len(scene_gaussians["means"])
     num_object = len(object_gaussians["means"])
