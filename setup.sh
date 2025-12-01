@@ -143,7 +143,9 @@ echo ""
 echo "10. Installing project requirements..."
 if [ -f "requirements.txt" ]; then
     pip install -r requirements.txt
-    echo "✓ Project requirements installed"
+    # Install gdown for downloading files from Google Drive
+    pip install gdown
+    echo "✓ Project requirements installed (including gdown)"
 else
     echo "⚠ No requirements.txt found"
 fi
