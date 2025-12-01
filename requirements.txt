@@ -43,4 +43,4 @@ matplotlib>=3.5.0
 # These are needed if you want to install separately
 # gsplat
 # torch-scatter
-# pycolmap
+pycolmap  # Required for COLMAP dataset loading
