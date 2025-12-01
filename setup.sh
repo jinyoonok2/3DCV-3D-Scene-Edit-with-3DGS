@@ -139,7 +139,7 @@ else
 fi
 echo ""
 
-# Install project requirements first (lighter weight dependencies)
+# Install project requirements
 echo "10. Installing project requirements..."
 if [ -f "requirements.txt" ]; then
     pip install -r requirements.txt
@@ -149,18 +149,8 @@ else
 fi
 echo ""
 
-# Install gsplat examples requirements (for dataset download tools)
-echo "11. Installing gsplat examples requirements..."
-if [ -f "gsplat-src/examples/requirements.txt" ]; then
-    echo "  Note: Using --no-build-isolation for packages that need torch during build"
-    echo "  This may take a few minutes..."
-    pip install -r gsplat-src/examples/requirements.txt --no-build-isolation 2>&1 | grep -v "Requirement already satisfied" || true
-    echo "✓ gsplat examples requirements installed"
-fi
-echo ""
-
 # Clone GroundingDINO repository for config files
-echo "12. Setting up GroundingDINO..."
+echo "11. Setting up GroundingDINO..."
 if [ ! -d "GroundingDINO" ]; then
     git clone https://github.com/IDEA-Research/GroundingDINO.git
     echo "✓ GroundingDINO repository cloned (for config files)"
@@ -170,7 +160,7 @@ fi
 echo ""
 
 # Install SAM2 from GitHub
-echo "13. Installing SAM2..."
+echo "12. Installing SAM2..."
 if python -c "import sam2" 2>/dev/null; then
     echo "✓ SAM2 already installed"
 else
@@ -179,36 +169,38 @@ else
 fi
 echo ""
 
-# Install 3D Inpainting Pipeline dependencies
-echo "14. Installing 3D Inpainting Pipeline models..."
-echo "  (TripoSR, Depth Anything v2, CLIP)"
-
-# TripoSR for Image-to-3D (Module 06)
-if python -c "from tsr.system import TSR" 2>/dev/null; then
-    echo "  ✓ TripoSR already installed"
+# Clone TripoSR repository and install dependencies (Module 06)
+echo "13. Setting up TripoSR..."
+if [ ! -d "TripoSR" ]; then
+    echo "  Cloning TripoSR repository..."
+    git clone https://github.com/VAST-AI-Research/TripoSR.git
+    
+    # Copy tsr source to project root for imports
+    cp -r TripoSR/tsr ./
+    
+    # Install TripoSR dependencies (combined for speed)
+    echo "  Installing TripoSR dependencies..."
+    pip install rembg==2.0.59 xatlas==0.0.9 trimesh onnxruntime
+    pip install git+https://github.com/tatsy/torchmcubes.git
+    
+    echo "✓ TripoSR repository cloned and dependencies installed"
 else
-    echo "  Installing TripoSR..."
-    pip install tsr trimesh rembg[gpu]
-    echo "  ✓ TripoSR installed"
-fi
-
-# Depth Anything v2 for depth estimation (Module 07)
-# Note: Depth Anything V2 will be loaded via Transformers (already installed)
-# Models auto-download on first use from: depth-anything/Depth-Anything-V2-Large-hf
-echo "  ✓ Depth Anything V2 available via Transformers (models download on first use)"
-
-# CLIP for evaluation (Module 08)
-if python -c "import clip" 2>/dev/null; then
-    echo "  ✓ CLIP already installed"
-else
-    echo "  Installing CLIP..."
-    pip install git+https://github.com/openai/CLIP.git
-    echo "  ✓ CLIP installed"
+    echo "✓ TripoSR repository already exists"
+    if [ ! -d "tsr" ]; then
+        echo "  Copying tsr source..."
+        cp -r TripoSR/tsr ./
+    fi
+    # Verify imports
+    if ! python -c "from tsr.system import TSR" 2>/dev/null; then
+        echo "  Installing missing dependencies..."
+        pip install rembg==2.0.59 xatlas==0.0.9 trimesh onnxruntime
+        pip install git+https://github.com/tatsy/torchmcubes.git
+    fi
 fi
 echo ""
 
 # Download model weights
-echo "15. Downloading model weights..."
+echo "14. Downloading model weights..."
 if [ ! -f "models/groundingdino_swint_ogc.pth" ] || [ ! -f "models/sam2_hiera_large.pt" ]; then
     echo "  Running download_models.sh..."
     chmod +x download_models.sh
@@ -221,7 +213,7 @@ fi
 echo ""
 
 # Final verification
-echo "16. Final verification..."
+echo "15. Final verification..."
 echo "  Testing imports..."
 python -c "
 import torch
@@ -236,22 +228,17 @@ print('  SAM2: OK')
 "
 echo ""
 
-# Download dataset
-echo "17. Checking for dataset..."
+# Download dataset (optional - can be slow)
+echo "16. Checking for dataset..."
 if [ ! -d "datasets/360_v2/garden" ]; then
-    echo "  Downloading Mip-NeRF 360 garden dataset (~2.5GB)..."
-    cd gsplat-src/examples
-    python datasets/download_dataset.py --dataset mipnerf360
-    cd ../..
-    
-    echo "  Moving dataset to project directory..."
-    mkdir -p datasets/360_v2
-    if [ -d "gsplat-src/examples/data/360_v2/garden" ]; then
-        cp -r gsplat-src/examples/data/360_v2/garden datasets/360_v2/garden
-        echo "✓ Dataset downloaded and moved to datasets/360_v2/garden"
-    else
-        echo "⚠ Dataset download location unexpected, please check manually"
-    fi
+    echo "⚠ Dataset not found. To download (~2.5GB), run:"
+    echo "  cd gsplat-src/examples"
+    echo "  python datasets/download_dataset.py --dataset mipnerf360"
+    echo "  cd ../.."
+    echo "  mkdir -p datasets/360_v2"
+    echo "  cp -r gsplat-src/examples/data/360_v2/garden datasets/360_v2/garden"
+    echo ""
+    echo "  Skipping automatic download to save time."
 else
     echo "✓ Dataset already exists at: datasets/360_v2/garden"
 fi
