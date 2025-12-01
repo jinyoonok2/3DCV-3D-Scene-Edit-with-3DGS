@@ -139,7 +139,7 @@ def get_bounds(positions):
     return min_bound, max_bound, center, size
 
 
-def transform_object_to_roi(object_gaussians, roi_data, args):
+def transform_object_to_roi(object_gaussians, roi_mask, scene_positions, args):
     """Transform object Gaussians to fit ROI location and size."""
     console.print("\nTransforming object to ROI...")
     
@@ -152,9 +152,8 @@ def transform_object_to_roi(object_gaussians, roi_data, args):
     console.print(f"  Center: {obj_center.numpy()}")
     console.print(f"  Size: {obj_size.numpy()}")
     
-    # Get ROI bounds
-    roi_mask = roi_data["roi_mask"]  # Boolean tensor
-    roi_positions = roi_data["means"][roi_mask]  # Positions of ROI Gaussians
+    # Get ROI bounds from scene positions with ROI mask
+    roi_positions = scene_positions[roi_mask]  # Positions of ROI Gaussians
     roi_min, roi_max, roi_center, roi_size = get_bounds(roi_positions)
     console.print(f"ROI bounds:")
     console.print(f"  Center: {roi_center.numpy()}")
@@ -304,16 +303,19 @@ def main():
     
     # Load checkpoints
     object_ckpt = load_checkpoint(args.object_gaussians, "Object Gaussians")
-    roi_ckpt = load_checkpoint(args.roi, "ROI")
+    roi_mask = load_checkpoint(args.roi, "ROI")  # This is just a tensor from Module 04a
     scene_ckpt = load_checkpoint(args.scene_gaussians, "Scene Gaussians")
     
     # Extract Gaussians from checkpoints
     object_gaussians = object_ckpt.get("gaussians", object_ckpt)
-    roi_data = roi_ckpt
     scene_gaussians = scene_ckpt.get("gaussians", scene_ckpt)
     
+    # roi_mask might be dict with 'roi_binary' or just a tensor
+    if isinstance(roi_mask, dict):
+        roi_mask = roi_mask.get("roi_binary", roi_mask.get("roi_mask", roi_mask))
+    
     # Transform object to ROI
-    transformed_object = transform_object_to_roi(object_gaussians, roi_data, args)
+    transformed_object = transform_object_to_roi(object_gaussians, roi_mask, scene_gaussians["means"], args)
     
     # Merge with scene
     merged_gaussians = merge_gaussians(scene_gaussians, transformed_object)
