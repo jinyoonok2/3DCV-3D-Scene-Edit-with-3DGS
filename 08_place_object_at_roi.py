@@ -68,10 +68,15 @@ def parse_args():
         help="Path to ROI file (.pt from Module 04a)",
     )
     parser.add_argument(
+        "--original_scene",
+        type=str,
+        help="Path to original scene checkpoint for ROI positions (default: infer from config)",
+    )
+    parser.add_argument(
         "--scene_gaussians",
         type=str,
         required=True,
-        help="Path to scene Gaussians after removal (.pt from Module 05c)",
+        help="Path to scene Gaussians after removal (.pt from Module 05a or 05c)",
     )
     parser.add_argument(
         "--output",
@@ -306,6 +311,18 @@ def main():
     roi_mask = load_checkpoint(args.roi, "ROI")  # This is just a tensor from Module 04a
     scene_ckpt = load_checkpoint(args.scene_gaussians, "Scene Gaussians")
     
+    # Load original scene for ROI positions if provided
+    if args.original_scene:
+        original_ckpt = load_checkpoint(args.original_scene, "Original Scene (for ROI positions)")
+        original_gaussians = original_ckpt.get("splats", original_ckpt.get("gaussians", original_ckpt))
+    else:
+        # Infer from config
+        config = ProjectConfig(args.config)
+        original_path = config.get_path('initial_training') / 'ckpt_initial.pt'
+        console.print(f"Inferring original scene path: {original_path}")
+        original_ckpt = load_checkpoint(str(original_path), "Original Scene (for ROI positions)")
+        original_gaussians = original_ckpt.get("splats", original_ckpt.get("gaussians", original_ckpt))
+    
     # Extract Gaussians from checkpoints
     object_gaussians = object_ckpt.get("gaussians", object_ckpt)
     # Scene checkpoint can have "splats" or "gaussians" key
@@ -315,8 +332,8 @@ def main():
     if isinstance(roi_mask, dict):
         roi_mask = roi_mask.get("roi_binary", roi_mask.get("roi_mask", roi_mask))
     
-    # Transform object to ROI
-    transformed_object = transform_object_to_roi(object_gaussians, roi_mask, scene_gaussians["means"], args)
+    # Transform object to ROI (using original scene positions for ROI bounds)
+    transformed_object = transform_object_to_roi(object_gaussians, roi_mask, original_gaussians["means"], args)
     
     # Merge with scene
     merged_gaussians = merge_gaussians(scene_gaussians, transformed_object)
