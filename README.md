@@ -310,7 +310,52 @@ python 05b_inpaint_holes_sdxl.py \
 python 05c_optimize_to_targets.py
 ```
 
-**3. Experiment with different prompts:**
+**3. Object Replacement Workflow (Remove + Replace):**
+
+This is the complete pipeline for replacing an existing object with a new generated object at the same location.
+
+```bash
+# Step 1-5: Remove the object (same as above)
+source activate.sh
+python init_project.py --scene garden --dataset_root datasets/360_v2/garden
+python 00_check_dataset.py
+python 01_train_gs_initial.py
+python 02_render_training_views.py
+python 03_ground_text_to_masks.py  # Segment "brown plant"
+python 04a_lift_masks_to_roi3d.py  # Get 3D location of plant
+python 05a_remove_and_render_holes.py  # Remove plant
+python 05b_inpaint_holes.py  # Fill the hole with background
+
+# Step 6: Generate new 3D object (e.g., "red flower in pot")
+# [Module 06 - Object Generation]
+# - Uses TripoSR to generate 3D mesh from text/image
+# - Converts mesh to 3D Gaussian representation
+# - Output: generated_object.pt (Gaussian parameters)
+
+# Step 7: Place object at original ROI location
+# [Module 07 - Object Placement]
+# - Loads roi.pt from 04a (has 3D position/bounds)
+# - Transforms generated Gaussians to match ROI center/scale
+# - Merges with inpainted scene from 05b
+# - Output: scene_with_new_object.pt
+
+# Step 8: Optimize combined scene
+# [Module 08 - Final Optimization]  
+# - Fine-tune merged Gaussians to match lighting/appearance
+# - Use similar optimization as 05c but with blending weights
+# - Output: final_edited_scene.pt
+```
+
+**Workflow Comparison**:
+
+| Task | Modules | Output |
+|------|---------|--------|
+| **Object Removal** | 00-05c | Scene with object removed |
+| **Object Replacement** | 00-05b → 06-08 | Scene with new object at same location |
+
+**Key Insight**: The ROI from Module 04a provides the 3D spatial location for placing the new object. By using the same ROI coordinates, we ensure the generated object appears at exactly the same position as the removed one.
+
+**4. Experiment with different prompts:**
 ```bash
 # Edit config.yaml:
 segmentation:
@@ -320,7 +365,7 @@ segmentation:
 python 03_ground_text_to_masks.py --text "red flowers"
 ```
 
-**4. Fine-tune parameters:**
+**5. Fine-tune parameters:**
 ```bash
 python 01_train_gs_initial.py --iters 50000
 python 03_ground_text_to_masks.py --dino_thresh 0.25 --sam_thresh 0.3
