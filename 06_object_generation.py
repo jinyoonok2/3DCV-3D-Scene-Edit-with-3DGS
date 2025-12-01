@@ -288,7 +288,7 @@ def main():
         output_dir = Path(args.output_dir)
     else:
         # Use same structure as other modules: outputs/{project.name}/06_object_gen/
-        project_name = config.get("project", {}).get("name", "garden")
+        project_name = config.get("project", "name") or "garden"
         output_dir = Path(f"outputs/{project_name}/06_object_gen")
     
     # Get input image

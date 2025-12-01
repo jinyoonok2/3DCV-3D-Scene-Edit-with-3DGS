@@ -308,8 +308,8 @@ def main():
     else:
         # Default: save in round_001 directory
         config = ProjectConfig(args.config)
-        project_name = config.get("project", {}).get("name", "garden")
-        round_name = config.get("round_name", "round_001")
+        project_name = config.get("project", "name") or "garden"
+        round_name = config.get("round_name") or "round_001"
         output_path = Path(f"outputs/{project_name}/{round_name}/08_merged_scene.pt")
     
     # Prepare metadata
