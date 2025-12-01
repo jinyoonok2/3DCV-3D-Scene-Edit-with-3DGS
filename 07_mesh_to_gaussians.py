@@ -263,9 +263,10 @@ def main():
     if args.output:
         output_path = Path(args.output)
     else:
-        # Default: save next to mesh file
-        mesh_path = Path(args.mesh)
-        output_path = mesh_path.parent / "gaussians.pt"
+        # Default: save in 06_object_gen directory
+        config = ProjectConfig(args.config)
+        scene_name = config.get("scene", "garden")
+        output_path = Path(f"outputs/{scene_name}/06_object_gen/gaussians.pt")
     
     # Prepare metadata
     metadata = {

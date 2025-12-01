@@ -306,9 +306,11 @@ def main():
     if args.output:
         output_path = Path(args.output)
     else:
-        # Default: save in same directory as scene
-        scene_path = Path(args.scene_gaussians)
-        output_path = scene_path.parent / "merged_with_object.pt"
+        # Default: save in round_001 directory
+        config = ProjectConfig(args.config)
+        scene_name = config.get("scene", "garden")
+        round_name = config.get("round_name", "round_001")
+        output_path = Path(f"outputs/{scene_name}/{round_name}/08_merged_scene.pt")
     
     # Prepare metadata
     metadata = {

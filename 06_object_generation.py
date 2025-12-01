@@ -231,7 +231,9 @@ def main():
     if args.output_dir:
         output_dir = Path(args.output_dir)
     else:
-        output_dir = config.get_path("module_06", "object_generation")
+        # Use same structure as other modules: outputs/{scene}/06_object_gen/
+        scene_name = config.get("scene", "garden")
+        output_dir = Path(f"outputs/{scene_name}/06_object_gen")
     
     # Get input image
     if args.image:
