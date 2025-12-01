@@ -308,7 +308,8 @@ def main():
     
     # Extract Gaussians from checkpoints
     object_gaussians = object_ckpt.get("gaussians", object_ckpt)
-    scene_gaussians = scene_ckpt.get("gaussians", scene_ckpt)
+    # Scene checkpoint can have "splats" or "gaussians" key
+    scene_gaussians = scene_ckpt.get("splats", scene_ckpt.get("gaussians", scene_ckpt))
     
     # roi_mask might be dict with 'roi_binary' or just a tensor
     if isinstance(roi_mask, dict):
