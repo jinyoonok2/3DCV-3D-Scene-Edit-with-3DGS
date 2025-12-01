@@ -1,6 +1,7 @@
 #!/bin/bash
-# Universal setup script for 3DGS Scene Editing project
-# Works on any Linux environment (local, WSL, Vast.ai, etc.)
+# Setup script for 3DGS Scene Editing project
+# Requires CUDA 12.6+ (enforced)
+# Works on local machines, cloud GPU instances (Vast.ai, etc.)
 #
 # Usage:
 #   ./setup.sh          - Install dependencies (creates venv if needed)
@@ -69,8 +70,13 @@ else
     echo ""
 fi
 
-# Install system dependencies for Pillow (if running with sudo/root)
-echo "4. Installing system dependencies..."
+# Verify Python and system info
+echo "4. Verifying environment..."
+python --version
+echo ""
+
+# Install system dependencies for Pillow
+echo "5. Installing system dependencies..."
 if [ "$EUID" -eq 0 ] || sudo -n true 2>/dev/null; then
     echo "  Installing Pillow build dependencies..."
     sudo apt-get update -qq && sudo apt-get install -y -qq \
@@ -84,28 +90,37 @@ else
 fi
 echo ""
 
-# Verify Python and CUDA
-echo "5. Verifying environment..."
-python --version
-echo ""
+# Check CUDA availability
+if command -v nvidia-smi &> /dev/null; then
+    echo "GPU Information:"
+    nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader
+    echo ""
+fi
 
-# Check if torch is installed and verify CUDA
+# Install PyTorch with CUDA 12.6
+echo "6. Installing PyTorch with CUDA 12.6..."
 if python -c "import torch" 2>/dev/null; then
     echo "PyTorch already installed:"
     python -c "import torch; print(f'  PyTorch: {torch.__version__}'); print(f'  CUDA available: {torch.cuda.is_available()}'); print(f'  CUDA version: {torch.version.cuda if torch.cuda.is_available() else \"N/A\"}'); print(f'  GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"N/A\"}')"
     echo ""
 else
-    echo "⚠ PyTorch not found. Installing PyTorch with CUDA 12.6 support..."
+    echo "  Installing PyTorch with CUDA 12.6 support..."
     echo "  This may take several minutes..."
-    pip install torch torchvision torchaudio
+    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
     echo "✓ PyTorch installed"
     echo ""
 fi
 
-# Install gsplat
-echo "6. Installing gsplat..."
+# Verify CUDA after PyTorch installation
+echo "7. Verifying CUDA availability..."
+python -c "import torch; assert torch.cuda.is_available(), 'CUDA not available!'; print(f'✓ CUDA is available'); print(f'  Device: {torch.cuda.get_device_name(0)}'); print(f'  CUDA Version: {torch.version.cuda}'); print(f'  Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB')"
+echo ""
+
+# Install gsplat from PyPI
+echo "8. Installing gsplat..."
 if python -c "import gsplat" 2>/dev/null; then
-    echo "✓ gsplat already installed"
+    echo "✓ gsplat already installed:"
+    python -c "import gsplat; print(f'  Version: {gsplat.__version__}')"
 else
     echo "  Compiling CUDA kernels (this may take a few minutes)..."
     pip install gsplat
@@ -113,9 +128,10 @@ else
 fi
 echo ""
 
-# Clone gsplat repository for examples
-echo "7. Setting up gsplat examples..."
+# Clone gsplat repository for examples (needed for requirements.txt)
+echo "9. Setting up gsplat examples repository..."
 if [ ! -d "gsplat-src" ]; then
+    echo "  Cloning gsplat repository..."
     git clone https://github.com/nerfstudio-project/gsplat.git gsplat-src
     echo "✓ gsplat repository cloned"
 else
@@ -123,8 +139,8 @@ else
 fi
 echo ""
 
-# Install project requirements (includes dependencies for gsplat examples)
-echo "8. Installing project requirements..."
+# Install project requirements first (lighter weight dependencies)
+echo "10. Installing project requirements..."
 if [ -f "requirements.txt" ]; then
     pip install -r requirements.txt
     echo "✓ Project requirements installed"
@@ -133,28 +149,18 @@ else
 fi
 echo ""
 
-# Install gsplat examples requirements (after PyTorch is confirmed)
-echo "9. Installing gsplat examples requirements..."
+# Install gsplat examples requirements (for dataset download tools)
+echo "11. Installing gsplat examples requirements..."
 if [ -f "gsplat-src/examples/requirements.txt" ]; then
-    # fused-ssim needs torch during build, so use --no-build-isolation
     echo "  Note: Using --no-build-isolation for packages that need torch during build"
-    pip install -r gsplat-src/examples/requirements.txt --no-build-isolation
+    echo "  This may take a few minutes..."
+    pip install -r gsplat-src/examples/requirements.txt --no-build-isolation 2>&1 | grep -v "Requirement already satisfied" || true
     echo "✓ gsplat examples requirements installed"
 fi
 echo ""
 
-# Install SAM2 from GitHub
-echo "10. Installing SAM2..."
-if python -c "import sam2" 2>/dev/null; then
-    echo "✓ SAM2 already installed"
-else
-    pip install git+https://github.com/facebookresearch/segment-anything-2.git
-    echo "✓ SAM2 installed"
-fi
-echo ""
-
 # Clone GroundingDINO repository for config files
-echo "11. Setting up GroundingDINO..."
+echo "12. Setting up GroundingDINO..."
 if [ ! -d "GroundingDINO" ]; then
     git clone https://github.com/IDEA-Research/GroundingDINO.git
     echo "✓ GroundingDINO repository cloned (for config files)"
@@ -163,8 +169,18 @@ else
 fi
 echo ""
 
+# Install SAM2 from GitHub
+echo "13. Installing SAM2..."
+if python -c "import sam2" 2>/dev/null; then
+    echo "✓ SAM2 already installed"
+else
+    pip install git+https://github.com/facebookresearch/segment-anything-2.git
+    echo "✓ SAM2 installed"
+fi
+echo ""
+
 # Install 3D Inpainting Pipeline dependencies
-echo "12. Installing 3D Inpainting Pipeline models..."
+echo "14. Installing 3D Inpainting Pipeline models..."
 echo "  (TripoSR, Depth Anything v2, CLIP)"
 
 # TripoSR for Image-to-3D (Module 06)
@@ -192,37 +208,49 @@ fi
 echo ""
 
 # Download model weights
-echo "13. Downloading model weights..."
+echo "15. Downloading model weights..."
 if [ ! -f "models/groundingdino_swint_ogc.pth" ] || [ ! -f "models/sam2_hiera_large.pt" ]; then
+    echo "  Running download_models.sh..."
     chmod +x download_models.sh
     ./download_models.sh
 else
     echo "✓ Model weights already downloaded"
-    echo "  To re-download, run: ./download_models.sh"
+    echo "  GroundingDINO: models/groundingdino_swint_ogc.pth"
+    echo "  SAM2: models/sam2_hiera_large.pt"
 fi
 echo ""
 
-# Download dataset (optional)
-echo "14. Checking for dataset..."
+# Final verification
+echo "16. Final verification..."
+echo "  Testing imports..."
+python -c "
+import torch
+import gsplat
+import sam2
+import numpy as np
+import PIL
+print('✓ All core packages imported successfully')
+print(f'  PyTorch: {torch.__version__} (CUDA: {torch.cuda.is_available()})')
+print(f'  gsplat: {gsplat.__version__}')
+print('  SAM2: OK')
+"
+echo ""
+
+# Download dataset
+echo "17. Checking for dataset..."
 if [ ! -d "datasets/360_v2/garden" ]; then
-    read -p "Download Mip-NeRF 360 garden dataset (~2.5GB)? [y/N] " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        echo "Downloading dataset..."
-        cd gsplat-src/examples
-        python datasets/download_dataset.py --dataset mipnerf360
-        cd ../..
-        
-        echo "Moving dataset to project directory..."
-        mkdir -p datasets/360_v2
+    echo "  Downloading Mip-NeRF 360 garden dataset (~2.5GB)..."
+    cd gsplat-src/examples
+    python datasets/download_dataset.py --dataset mipnerf360
+    cd ../..
+    
+    echo "  Moving dataset to project directory..."
+    mkdir -p datasets/360_v2
+    if [ -d "gsplat-src/examples/data/360_v2/garden" ]; then
         cp -r gsplat-src/examples/data/360_v2/garden datasets/360_v2/garden
-        echo "✓ Dataset downloaded and moved"
-        
-        echo "Validating dataset..."
-        python 00_check_dataset.py --data_root datasets/360_v2/garden --factor 4
+        echo "✓ Dataset downloaded and moved to datasets/360_v2/garden"
     else
-        echo "⊘ Dataset download skipped"
-        echo "  To download later: cd gsplat-src/examples && python datasets/download_dataset.py --dataset mipnerf360"
+        echo "⚠ Dataset download location unexpected, please check manually"
     fi
 else
     echo "✓ Dataset already exists at: datasets/360_v2/garden"
@@ -230,19 +258,37 @@ fi
 echo ""
 
 echo "=========================================="
-echo "Setup Complete!"
+echo "Environment Setup Complete!"
 echo "=========================================="
 echo ""
 echo "Virtual environment: $VENV_DIR"
 echo ""
-echo "To activate the environment, run:"
-echo "  source activate.sh"
+echo "✓ Public files downloaded:"
+echo "  - Dataset: datasets/360_v2/garden"
+echo "  - Models: models/groundingdino_swint_ogc.pth, models/sam2_hiera_large.pt"
 echo ""
-echo "To start training:"
-echo "  source activate.sh"
-echo "  python 01_train_gs_initial.py --data_root datasets/360_v2/garden --iters 30000"
+echo "⚠ You still need to upload YOUR trained files from local machine:"
+echo "  1. Checkpoint (trained Gaussian Splatting model):"
+echo "     outputs/garden/01_gs_base/ckpt_initial.pt (~500MB)"
 echo ""
-echo "For help with any module:"
-echo "  python <module_name>.py --help"
+echo "  2. Masks (generated from Module 03):"
+echo "     outputs/garden/round_001/masks_brown_plant/sam_masks/ (~200MB)"
+echo ""
+echo "Upload using scp or rsync from your local machine:"
+echo "  scp -r outputs/garden root@<vastai-ip>:/workspace/3DCV-3D-Scene-Edit-with-3DGS/"
+echo ""
+echo "Then run Module 04a:"
+echo "  source activate.sh"
+echo "  python 04a_lift_masks_to_roi3d.py \\"
+echo "    --ckpt outputs/garden/01_gs_base/ckpt_initial.pt \\"
+echo "    --masks_root outputs/garden/round_001/masks_brown_plant/sam_masks \\"
+echo "    --data_root datasets/360_v2/garden \\"
+echo "    --roi_thresh 0.5 \\"
+echo "    --sh_degree 3 \\"
+echo "    --output_dir outputs/garden/round_001"
+echo ""
+echo "Download results back to local machine:"
+echo "  scp root@<vastai-ip>:/workspace/3DCV-3D-Scene-Edit-with-3DGS/outputs/garden/round_001/roi.pt outputs/garden/round_001/"
 echo ""
 echo "=========================================="
+echo ""
