@@ -308,9 +308,9 @@ def main():
     else:
         # Default: save in round_001 directory
         config = ProjectConfig(args.config)
-        scene_name = config.get("scene", "garden")
+        project_name = config.get("project", {}).get("name", "garden")
         round_name = config.get("round_name", "round_001")
-        output_path = Path(f"outputs/{scene_name}/{round_name}/08_merged_scene.pt")
+        output_path = Path(f"outputs/{project_name}/{round_name}/08_merged_scene.pt")
     
     # Prepare metadata
     metadata = {

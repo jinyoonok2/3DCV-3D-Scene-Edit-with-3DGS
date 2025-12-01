@@ -265,8 +265,8 @@ def main():
     else:
         # Default: save in 06_object_gen directory
         config = ProjectConfig(args.config)
-        scene_name = config.get("scene", "garden")
-        output_path = Path(f"outputs/{scene_name}/06_object_gen/gaussians.pt")
+        project_name = config.get("project", {}).get("name", "garden")
+        output_path = Path(f"outputs/{project_name}/06_object_gen/gaussians.pt")
     
     # Prepare metadata
     metadata = {
