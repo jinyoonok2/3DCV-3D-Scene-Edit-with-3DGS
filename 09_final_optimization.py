@@ -92,11 +92,39 @@ def main():
     console.print("[cyan]Calling Module 05c for optimization...[/cyan]\n")
     
     # Build command for 05c
+    # For Module 09 (object placement), we optimize against original dataset images
+    # not inpainted targets. We need to create a symbolic link or copy dataset images
+    # to a targets directory for 05c to use.
+    
+    from pathlib import Path
+    import shutil
+    
+    # Create temporary targets directory with dataset images
+    temp_targets = Path(output_dir) / "temp_targets"
+    temp_targets.mkdir(parents=True, exist_ok=True)
+    
+    # Copy or link dataset images to targets directory
+    dataset_images = Path(args.data_root) / "images_4"  # Assuming factor=4
+    if not dataset_images.exists():
+        dataset_images = Path(args.data_root) / "images"
+    
+    if dataset_images.exists():
+        console.print(f"[cyan]Using dataset images from: {dataset_images}[/cyan]")
+        # Create symlink instead of copying to save space
+        for img in dataset_images.glob("*.JPG") or dataset_images.glob("*.jpg") or dataset_images.glob("*.png"):
+            target_link = temp_targets / img.name
+            if not target_link.exists():
+                target_link.symlink_to(img.absolute())
+    else:
+        console.print(f"[red]Error: Could not find dataset images in {args.data_root}[/red]")
+        sys.exit(1)
+    
     cmd = [
         sys.executable,
         "05c_optimize_to_targets.py",
         "--config", args.config,
         "--ckpt", args.init_ckpt,
+        "--targets_dir", str(temp_targets),
         "--data_root", args.data_root,
         "--output_dir", output_dir,
         "--iters", str(args.iters),
