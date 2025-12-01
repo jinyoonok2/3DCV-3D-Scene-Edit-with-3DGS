@@ -1,38 +1,39 @@
 # 3D Scene Editing with 3D Gaussian Splatting
 
-Text-guided 3D scene editing: **gsplat + SAM2 + GroundingDINO + SDXL Inpainting**
+Text-guided 3D scene editing: **gsplat + SAM2 + GroundingDINO + TripoSR + SDXL**
 
-**Pipeline**: Train 3DGS → Segment objects → Compute 3D ROI → Remove & inpaint → Optimize
+**Pipelines:**
+- **Object Removal** (00-05c): Train → Segment → Remove → Inpaint → Optimize
+- **Object Replacement** (06-09): Generate mesh → Convert to GS → Place at ROI → Optimize
 
 ---
 
 ## Quick Start
 
 ```bash
-# 1. Setup environment
+# Setup
 git clone https://github.com/jinyoonok2/3DCV-3D-Scene-Edit-with-3DGS
 cd 3DCV-3D-Scene-Edit-with-3DGS
-chmod +x setup.sh && ./setup.sh
-source activate.sh
+./setup.sh && source activate.sh
 
-# 2. Initialize config
+# Initialize config
 python init_project.py --scene garden --dataset_root datasets/360_v2/garden
 
-# 3. Run pipeline (all from config.yaml)
+# Object Removal Pipeline
 python 00_check_dataset.py
 python 01_train_gs_initial.py
 python 02_render_training_views.py
-python 03_ground_text_to_masks.py
+python 03_ground_text_to_masks.py --text "brown plant"
 python 04a_lift_masks_to_roi3d.py
 python 05a_remove_and_render_holes.py
 python 05b_inpaint_holes.py
 python 05c_optimize_to_targets.py
-```
 
-**Override parameters:**
-```bash
-python 01_train_gs_initial.py --iters 50000
-python 03_ground_text_to_masks.py --text "red flowers" --dino_thresh 0.25
+# Object Replacement Pipeline (optional)
+python 06_object_generation.py --image flower.png
+python 07_mesh_to_gaussians.py --mesh outputs/.../mesh.ply
+python 08_place_object_at_roi.py --object_gaussians outputs/.../gaussians.pt --roi outputs/.../roi.pt --scene_gaussians outputs/.../05c_optimized.pt
+python 05c_optimize_to_targets.py --init_ckpt outputs/.../merged_with_object.pt  # Reuse 05c for final optimization
 ```
 
 ---
@@ -299,94 +300,99 @@ python 05b_inpaint_holes.py          # LaMa (default)
 python 05c_optimize_to_targets.py
 ```
 
-**2. Pipeline with SDXL inpainting (ablation):**
+**2. SDXL inpainting (alternative):**
 ```bash
-# Run steps 00-05a same as above
-python 05b_inpaint_holes_sdxl.py \
-    --model sdxl \
-    --prompt "natural outdoor garden scene with grass and plants" \
-    --negative_prompt "brown plant, dead plant, object, artifact, blur" \
-    --strength 0.99
+python 05b_inpaint_holes_sdxl.py --model sdxl --prompt "garden scene" --strength 0.99
 python 05c_optimize_to_targets.py
 ```
 
-**3. Object Replacement Workflow (Remove + Replace):**
-
-This is the complete pipeline for replacing an existing object with a new generated object at the same location.
-
+**3. Object Replacement (Remove old → Add new):**
 ```bash
-# Step 1-5: Remove the object (same as above)
-source activate.sh
-python init_project.py --scene garden --dataset_root datasets/360_v2/garden
+# Remove object (Modules 00-05c)
 python 00_check_dataset.py
 python 01_train_gs_initial.py
 python 02_render_training_views.py
-python 03_ground_text_to_masks.py  # Segment "brown plant"
-python 04a_lift_masks_to_roi3d.py  # Get 3D location of plant
-python 05a_remove_and_render_holes.py  # Remove plant
-python 05b_inpaint_holes.py  # Fill the hole with background
-python 05c_optimize_to_targets.py  # Optimize inpainted scene
+python 03_ground_text_to_masks.py --text "brown plant"
+python 04a_lift_masks_to_roi3d.py
+python 05a_remove_and_render_holes.py
+python 05b_inpaint_holes.py
+python 05c_optimize_to_targets.py
 
-# Step 6: Generate new 3D object (e.g., "red flower in pot")
-# [Module 06 - Object Generation]
-# - Uses TripoSR to generate 3D mesh from text/image prompt
-# - Removes background, previews the mesh
-# - Output: mesh.ply (3D mesh file)
-
-# Step 7: Convert mesh to Gaussians
-# [Module 07 - Mesh to Gaussians Conversion]
-# - Samples points from mesh surface
-# - Initializes Gaussian parameters (positions, scales, colors)
-# - Output: gaussians.pt (Gaussian representation of object)
-
-# Step 8: Place object at original ROI location
-# [Module 08 - Object Placement]
-# - Loads roi.pt from 04a (has 3D position/bounds)
-# - Transforms generated Gaussians to match ROI center/scale
-# - Merges with inpainted scene from 05c
-# - Output: scene_with_new_object.pt
-
-# Step 9: Final optimization
-# [Module 09 - Final Optimization]  
-# - Fine-tune merged Gaussians to match lighting/appearance
-# - Use similar optimization as 05c but for complete scene
-# - Output: final_edited_scene.pt
+# Generate and place new object (Modules 06-09)
+python 06_object_generation.py --image flower.png
+python 07_mesh_to_gaussians.py --mesh outputs/garden/06_object_gen/mesh.ply --num_points 10000
+python 08_place_object_at_roi.py \
+  --object_gaussians outputs/garden/06_object_gen/gaussians.pt \
+  --roi outputs/garden/round_001/roi.pt \
+  --scene_gaussians outputs/garden/round_001/05c_optimized.pt \
+  --placement bottom --scale_factor 0.8
+python 05c_optimize_to_targets.py --init_ckpt outputs/garden/round_001/merged_with_object.pt
 ```
 
-**Workflow Comparison**:
+---
 
-| Task | Modules | Output |
-|------|---------|--------|
-| **Object Removal** | 00-05c | Scene with object removed |
-| **Object Replacement** | 00-05c → 06-09 | Scene with new object at same location |
+## Module Details
 
-**Key Insight**: The ROI from Module 04a provides the 3D spatial location for placing the new object. By using the same ROI coordinates, we ensure the generated object appears at exactly the same position as the removed one.
+### 00-05c: Object Removal
+See original sections above for details.
 
-**Pipeline Flow**:
-```
-Text/Image → [06: Generate Mesh] → mesh.ply
-          → [07: Mesh to Gaussians] → gaussians.pt
-          → [08: Place at ROI] → merged scene
-          → [09: Optimize] → final result
-```
+---
 
-**4. Experiment with different prompts:**
+### 06. Object Generation
+Generate 3D mesh from image using TripoSR.
 ```bash
-# Edit config.yaml:
-segmentation:
-  text_prompt: "red flowers"
-  
-# Or override:
-python 03_ground_text_to_masks.py --text "red flowers"
+python 06_object_generation.py --image flower.png
+```
+**Outputs**: `mesh.obj`, `mesh.ply`, `input_image.png`, `preview.png`
+
+---
+
+### 07. Mesh to Gaussians
+Convert mesh to Gaussian splats by sampling surface points.
+```bash
+python 07_mesh_to_gaussians.py --mesh mesh.ply --num_points 10000
+```
+**Outputs**: `gaussians.pt` (Gaussian parameters)
+
+---
+
+### 08. Place Object at ROI
+Transform and merge generated object with scene at ROI location.
+```bash
+python 08_place_object_at_roi.py \
+  --object_gaussians gaussians.pt \
+  --roi roi.pt \
+  --scene_gaussians scene.pt \
+  --placement bottom  # or center/top
+```
+**Options**:
+- `--placement bottom`: Sits on surface (default)
+- `--scale_factor 0.8`: Size relative to ROI (default 80%)
+- `--z_offset 0.05`: Adjust height
+- `--rotation_degrees 45`: Rotate object
+
+**Outputs**: `merged_with_object.pt`
+
+---
+
+### 09. Final Optimization
+Use Module 05c to optimize merged scene:
+```bash
+python 05c_optimize_to_targets.py --init_ckpt merged_with_object.pt
 ```
 
-**5. Fine-tune parameters:**
+---
+
+## Typical Workflows
+
+**Remove only:**
 ```bash
-python 01_train_gs_initial.py --iters 50000
-python 03_ground_text_to_masks.py --dino_thresh 0.25 --sam_thresh 0.3
-python 04a_lift_masks_to_roi3d.py --roi_thresh 0.6
-python 05b_inpaint_holes.py --mask_blur 10 --mask_dilate 5
-python 05c_optimize_to_targets.py --iters 2000 --lr_means 2e-4
+00 → 01 → 02 → 03 → 04a → 05a → 05b → 05c
+```
+
+**Replace:**
+```bash
+00 → 01 → 02 → 03 → 04a → 05a → 05b → 05c → 06 → 07 → 08 → 05c
 ```
 
 ---
@@ -395,7 +401,7 @@ python 05c_optimize_to_targets.py --iters 2000 --lr_means 2e-4
 
 ```
 project/
-├── config.yaml              # Generated by init_project.py
+├── config.yaml
 ├── datasets/
 │   └── 360_v2/garden/
 │       ├── images/          # Training images
