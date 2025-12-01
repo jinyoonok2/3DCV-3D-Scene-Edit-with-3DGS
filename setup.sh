@@ -241,17 +241,30 @@ print('  SAM2: OK')
 "
 echo ""
 
-# Download dataset (optional - can be slow)
-echo "16. Checking for dataset..."
+# Download dataset (required for all modules)
+echo "16. Downloading dataset..."
 if [ ! -d "datasets/360_v2/garden" ]; then
-    echo "⚠ Dataset not found. To download (~2.5GB), run:"
-    echo "  cd gsplat-src/examples"
-    echo "  python datasets/download_dataset.py --dataset mipnerf360"
-    echo "  cd ../.."
-    echo "  mkdir -p datasets/360_v2"
-    echo "  cp -r gsplat-src/examples/data/360_v2/garden datasets/360_v2/garden"
-    echo ""
-    echo "  Skipping automatic download to save time."
+    echo "  Downloading MipNeRF360 garden dataset (~2.5GB)..."
+    echo "  This may take several minutes depending on connection speed."
+    
+    # Try to download using gsplat's downloader
+    if [ -f "gsplat-src/examples/datasets/download_dataset.py" ]; then
+        cd gsplat-src/examples
+        python datasets/download_dataset.py --dataset mipnerf360 2>/dev/null || echo "⚠ Download script not working, trying alternative..."
+        cd ../..
+    fi
+    
+    # Check if download succeeded and copy to project
+    if [ -d "gsplat-src/examples/data/360_v2/garden" ]; then
+        mkdir -p datasets/360_v2
+        cp -r gsplat-src/examples/data/360_v2/garden datasets/360_v2/garden
+        echo "✓ Dataset copied to datasets/360_v2/garden"
+    else
+        echo "⚠ Automatic download failed. Please download manually:"
+        echo "  wget http://storage.googleapis.com/gresearch/refraw360/360_v2.zip"
+        echo "  unzip 360_v2.zip -d datasets/"
+        echo "  Or use: gsutil -m cp -r gs://gresearch/refraw360/360_v2 datasets/"
+    fi
 else
     echo "✓ Dataset already exists at: datasets/360_v2/garden"
 fi
