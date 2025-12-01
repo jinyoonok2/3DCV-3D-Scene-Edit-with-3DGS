@@ -184,7 +184,7 @@ if [ ! -d "TripoSR" ]; then
     
     # Install TripoSR dependencies (combined for speed)
     echo "  Installing TripoSR dependencies..."
-    pip install rembg==2.0.59 xatlas==0.0.9 trimesh onnxruntime
+    pip install rembg==2.0.59 xatlas==0.0.9 trimesh onnxruntime einops omegaconf
     pip install git+https://github.com/tatsy/torchmcubes.git
     
     echo "✓ TripoSR repository cloned and dependencies installed"
@@ -204,7 +204,7 @@ else
     # Verify imports
     if ! python -c "from tsr.system import TSR" 2>/dev/null; then
         echo "  Installing missing dependencies..."
-        pip install rembg==2.0.59 xatlas==0.0.9 trimesh onnxruntime
+        pip install rembg==2.0.59 xatlas==0.0.9 trimesh onnxruntime einops omegaconf
         pip install git+https://github.com/tatsy/torchmcubes.git
     fi
 fi
