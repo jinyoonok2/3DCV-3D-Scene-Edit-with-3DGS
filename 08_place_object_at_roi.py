@@ -82,7 +82,18 @@ def parse_args():
         "--scale_factor",
         type=float,
         default=0.8,
-        help="Scale factor for object size relative to ROI (default: 0.8)",
+        help="Scale factor for object size relative to ROI (default: 0.8). Ignored if --no_scale is set.",
+    )
+    parser.add_argument(
+        "--no_scale",
+        action="store_true",
+        help="Do not auto-scale object to fit ROI. Object keeps original size (or use --manual_scale).",
+    )
+    parser.add_argument(
+        "--manual_scale",
+        type=float,
+        default=1.0,
+        help="Manual uniform scale multiplier when --no_scale is set (default: 1.0)",
     )
     parser.add_argument(
         "--placement",
@@ -152,12 +163,17 @@ def transform_object_to_roi(object_gaussians, roi_data, args):
     # 1. Center object at origin
     centered_positions = obj_positions - obj_center
     
-    # 2. Scale object to fit ROI
-    # Use the maximum dimension to preserve aspect ratio
-    obj_max_dim = obj_size.max()
-    roi_max_dim = roi_size.max()
-    scale = (roi_max_dim / obj_max_dim) * args.scale_factor
-    console.print(f"Scale factor: {scale:.4f}")
+    # 2. Scale object
+    if args.no_scale:
+        # Use manual scale only (no ROI-based auto-scaling)
+        scale = args.manual_scale
+        console.print(f"Manual scale: {scale:.4f} (no ROI auto-scaling)")
+    else:
+        # Auto-scale to fit ROI
+        obj_max_dim = obj_size.max()
+        roi_max_dim = roi_size.max()
+        scale = (roi_max_dim / obj_max_dim) * args.scale_factor
+        console.print(f"Auto-scale to fit ROI: {scale:.4f}")
     
     scaled_positions = centered_positions * scale
     scaled_scales = object_gaussians["scales"] + np.log(scale)  # Scales are in log space
