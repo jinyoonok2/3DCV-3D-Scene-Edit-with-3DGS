@@ -178,6 +178,10 @@ if [ ! -d "TripoSR" ]; then
     # Copy tsr source to project root for imports
     cp -r TripoSR/tsr ./
     
+    # Create __init__.py files for Python module
+    touch tsr/__init__.py
+    touch tsr/models/__init__.py
+    
     # Install TripoSR dependencies (combined for speed)
     echo "  Installing TripoSR dependencies..."
     pip install rembg==2.0.59 xatlas==0.0.9 trimesh onnxruntime
@@ -189,6 +193,13 @@ else
     if [ ! -d "tsr" ]; then
         echo "  Copying tsr source..."
         cp -r TripoSR/tsr ./
+        touch tsr/__init__.py
+        touch tsr/models/__init__.py
+    fi
+    # Create __init__.py if missing
+    if [ ! -f "tsr/__init__.py" ]; then
+        touch tsr/__init__.py
+        touch tsr/models/__init__.py
     fi
     # Verify imports
     if ! python -c "from tsr.system import TSR" 2>/dev/null; then
