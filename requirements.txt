@@ -1,4 +1,5 @@
-# Core project dependencies
+# Core project dependencies (Phase 1 - Object Removal)
+# Used with requirements-gsplat.txt in setup.sh for steps 00-05c
 torch
 pyyaml
 numpy<2.0.0

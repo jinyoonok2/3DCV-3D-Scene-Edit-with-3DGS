@@ -127,7 +127,20 @@ echo ""
 echo "Step 6: Setting up external repositories"
 
 # gsplat-src contains examples and dataset parsers (NOT for installation)
-echo "✓ gsplat-src examples available (COLMAP parser, utils, fused_ssim)"
+if [ -d "gsplat-src" ]; then
+    echo "  Removing existing gsplat-src to get original version..."
+    rm -rf gsplat-src
+fi
+
+echo "  Cloning fresh gsplat-src repository..."
+git clone https://github.com/nerfstudio-project/gsplat.git gsplat-src -q
+echo "✓ gsplat-src cloned (original version)"
+
+# Create symlink for datasets module access
+if [ ! -L "datasets" ]; then
+    ln -sf gsplat-src/examples/datasets datasets
+    echo "✓ datasets symlink created"
+fi
 
 # GroundingDINO for config files
 if [ ! -d "GroundingDINO" ]; then
@@ -160,12 +173,21 @@ fi
 echo ""
 
 #=============================================================================
-# 8. TripoSR Dependencies
+# 8. gsplat-src Dependencies (for object removal pipeline)
 #=============================================================================
-echo "Step 8: Installing TripoSR dependencies"
-if [ -f "requirements-triposr.txt" ]; then
-    pip install -r requirements-triposr.txt
-    echo "✓ TripoSR dependencies installed"
+echo "Step 8: Installing gsplat-src dependencies"
+if [ -f "requirements-gsplat.txt" ]; then
+    echo "  Installing gsplat example dependencies..."
+    pip install -r requirements-gsplat.txt
+    echo "✓ gsplat-src dependencies installed"
+fi
+
+# Install fused-ssim separately (optional performance optimization)
+echo "  Installing fused-ssim (performance optimization)..."
+if pip install --no-build-isolation git+https://github.com/rahul-goel/fused-ssim@328dc9836f513d00c4b5bc38fe30478b4435cbb5; then
+    echo "✓ fused-ssim installed successfully"
+else
+    echo "⚠ fused-ssim installation failed (CUDA compilation issues) - continuing without it"
 fi
 
 # SAM2 (separate install due to potential conflicts)
@@ -224,8 +246,14 @@ print('✓ SAM2, NumPy, Pillow: OK')
 echo ""
 
 echo "=========================================="
-echo "Setup Complete!"
+echo "OBJECT REMOVAL SETUP COMPLETE!"
+echo "Ready for steps 00-05c (scene editing)"
 echo "=========================================="
+echo ""
+echo "Next steps:"
+echo "1. Run scripts 00-05c for object removal"
+echo "2. After completing removal, run ./setup_replacement.sh"
+echo "   to add object generation capabilities (06+)"
 echo ""
 echo "Activate environment:"
 echo "  source activate.sh"

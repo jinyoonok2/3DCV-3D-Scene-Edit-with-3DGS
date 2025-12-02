@@ -1,4 +1,6 @@
-# gsplat-src examples dependencies (matches examples/requirements.txt exactly)
+# gsplat-src examples dependencies (Phase 1 - Object Removal)
+# Used with requirements.txt in setup.sh for steps 00-05c
+# Matches gsplat-src/examples/requirements.txt exactly
 # assume torch is already installed
 
 # pycolmap for data parsing
@@ -15,7 +17,7 @@ tqdm
 torchmetrics[image]
 opencv-python
 tyro>=0.8.8
-Pillow
+Pillow>=9.5.0,<10.0.0
 tensorboard
 tensorly
 pyyaml

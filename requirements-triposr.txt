@@ -1,4 +1,6 @@
-# TripoSR image-to-3D mesh generation dependencies
+# TripoSR image-to-3D mesh generation dependencies (Phase 2)
+# This file is used independently in setup_replacement.sh
+
 tsr
 trimesh
 rembg[gpu]==2.0.59
@@ -9,7 +11,7 @@ omegaconf
 pyglet<2
 gdown
 
-# Version constraints to prevent conflicts with simple-lama-inpainting
+# Version constraints (compatible with existing environment)
 numpy<2.0.0,>=1.24.3
 Pillow>=9.5.0,<10.0.0
 
