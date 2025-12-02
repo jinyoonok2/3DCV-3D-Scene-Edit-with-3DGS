@@ -153,16 +153,7 @@ else
     echo "✓ GroundingDINO exists"
 fi
 
-# TripoSR for 3D mesh generation
-if [ ! -d "TripoSR" ]; then
-    git clone https://github.com/VAST-AI-Research/TripoSR.git -q
-    cp -r TripoSR/tsr ./
-    touch tsr/__init__.py tsr/models/__init__.py
-    echo "✓ TripoSR cloned and configured"
-else
-    echo "✓ TripoSR exists"
-    [ ! -d "tsr" ] && cp -r TripoSR/tsr ./ && touch tsr/__init__.py tsr/models/__init__.py
-fi
+
 echo ""
 
 #=============================================================================
@@ -201,31 +192,12 @@ fi
 echo "✓ Additional dependencies installed"
 echo ""
 
-#=============================================================================
-# 9. gsplat-src Example Dependencies (with CUDA extensions)
-#=============================================================================
-echo "Step 9: Installing gsplat-src example dependencies"
 
-# Install gsplat dependencies
-if [ -f "requirements-gsplat.txt" ]; then
-    echo "  Installing gsplat example dependencies..."
-    pip install -r requirements-gsplat.txt
-    echo "✓ gsplat-src example dependencies installed"
-fi
-
-# Install fused-ssim separately (optional performance optimization)
-echo "  Installing fused-ssim (performance optimization)..."
-if pip install --no-build-isolation git+https://github.com/rahul-goel/fused-ssim@328dc9836f513d00c4b5bc38fe30478b4435cbb5; then
-    echo "✓ fused-ssim installed successfully"
-else
-    echo "⚠ fused-ssim installation failed (CUDA compilation issues) - continuing without it"
-fi
-echo ""
 
 #=============================================================================
-# 10. Download Model Weights
+# 9. Download Model Weights
 #=============================================================================
-echo "Step 10: Downloading model weights"
+echo "Step 9: Downloading model weights"
 if [ ! -f "models/groundingdino_swint_ogc.pth" ] || [ ! -f "models/sam2_hiera_large.pt" ]; then
     chmod +x download_models.sh
     ./download_models.sh
@@ -235,9 +207,9 @@ fi
 echo ""
 
 #=============================================================================
-# 11. Download MipNeRF-360 Dataset (Optional)
+# 10. Download MipNeRF-360 Dataset (Optional)
 #=============================================================================
-echo "Step 11: MipNeRF-360 dataset download"
+echo "Step 10: MipNeRF-360 dataset download"
 if [ ! -d "datasets/360_v2" ] || [ -z "$(ls -A datasets/360_v2 2>/dev/null)" ]; then
     echo "MipNeRF-360 dataset not found. Would you like to download it?"
     echo "This will download all 7 scenes (~10 GB total)"
@@ -257,9 +229,9 @@ fi
 echo ""
 
 #=============================================================================
-# 12. Final Verification
+# 11. Final Verification
 #=============================================================================
-echo "Step 12: Final verification"
+echo "Step 11: Final verification"
 python -c "
 import torch, gsplat, sam2, numpy, PIL
 print(f'✓ PyTorch: {torch.__version__} (CUDA: {torch.cuda.is_available()})')

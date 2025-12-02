@@ -23,6 +23,8 @@ datasets/
 GroundingDINO/
 sam2/
 gsplat-src/
+TripoSR/
+tsr/
 
 # Model weights
 models/
