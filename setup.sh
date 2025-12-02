@@ -124,25 +124,24 @@ python -c "import torch; assert torch.cuda.is_available(), 'CUDA not available!'
 echo ""
 
 #=============================================================================
-# 5. gsplat
+# 5. gsplat (pip package)
 #=============================================================================
-echo "Step 5: Installing gsplat"
+echo "Step 5: Installing gsplat from pip"
 if python -c "import gsplat" 2>/dev/null; then
     echo "✓ gsplat already installed: $(python -c 'import gsplat; print(gsplat.__version__)')"
 else
-    pip install gsplat --no-deps
-    pip install numpy jaxtyping typing_extensions ninja rich
-    echo "✓ gsplat installed"
+    pip install gsplat
+    echo "✓ gsplat installed from pip"
 fi
 echo ""
 
 #=============================================================================
 # 6. Clone Required Repositories
 #=============================================================================
-echo "Step 6: Cloning repositories"
+echo "Step 6: Setting up external repositories"
 
-# gsplat-src included in repository (no cloning needed)
-echo "✓ gsplat-src integrated with pycolmap compatibility fixes"
+# gsplat-src contains examples and dataset parsers (NOT for installation)
+echo "✓ gsplat-src examples available (COLMAP parser, utils, fused_ssim)"
 
 # GroundingDINO for config files
 if [ ! -d "GroundingDINO" ]; then
@@ -192,11 +191,11 @@ echo "✓ Additional dependencies installed"
 echo ""
 
 #=============================================================================
-# 9. gsplat Dependencies (with CUDA extensions)
+# 9. gsplat-src Example Dependencies (with CUDA extensions)
 #=============================================================================
-echo "Step 9: Installing gsplat dependencies"
+echo "Step 9: Installing gsplat-src example dependencies"
 
-# Find CUDA toolkit
+# Find CUDA toolkit for fused-ssim compilation
 CUDA_HOME=""
 if command -v nvcc &> /dev/null; then
     NVCC_PATH=$(which nvcc)
@@ -209,9 +208,9 @@ fi
 
 if [ -z "$CUDA_HOME" ] || [ ! -f "$CUDA_HOME/bin/nvcc" ]; then
     echo "⚠ Warning: nvcc not found"
-    echo "  fused-ssim requires CUDA toolkit"
+    echo "  fused-ssim (from gsplat-src examples) requires CUDA toolkit"
     echo "  Install: conda install -c nvidia cuda-toolkit"
-    echo "  Installing gsplat dependencies without fused-ssim..."
+    echo "  Installing gsplat-src example dependencies without fused-ssim..."
     if [ -f "requirements-gsplat.txt" ]; then
         grep -v "fused-ssim" requirements-gsplat.txt | pip install -r /dev/stdin
     fi
@@ -222,13 +221,13 @@ else
     export TORCH_CUDA_ARCH_LIST="8.9+PTX"
     export FORCE_CUDA=1
     
-    # Install all gsplat dependencies with --no-build-isolation
+    # Install all gsplat-src example dependencies with --no-build-isolation
     if [ -f "requirements-gsplat.txt" ]; then
         pip install --no-build-isolation -r requirements-gsplat.txt || \
-        echo "  ⚠ Some gsplat packages failed (may be optional)"
+        echo "  ⚠ Some gsplat-src example packages failed (may be optional)"
     fi
     
-    echo "✓ gsplat dependencies installed"
+    echo "✓ gsplat-src example dependencies installed"
 fi
 echo ""
 
@@ -244,39 +243,12 @@ else
 fi
 echo ""
 
-#=============================================================================
-# 11. Download Dataset
-#=============================================================================
-echo "Step 11: Downloading dataset (MipNeRF360 garden)"
-if [ ! -d "datasets/360_v2/garden" ]; then
-    echo "  Downloading dataset (~2.5GB)..."
-    mkdir -p datasets/360_v2
-    
-    # Try gsplat downloader
-    if [ -f "gsplat-src/examples/datasets/download_dataset.py" ]; then
-        cd gsplat-src/examples
-        python datasets/download_dataset.py --dataset mipnerf360 2>/dev/null || true
-        cd ../..
-    fi
-    
-    # Copy if download succeeded
-    if [ -d "gsplat-src/examples/data/360_v2/garden" ]; then
-        cp -r gsplat-src/examples/data/360_v2/garden datasets/360_v2/
-        echo "✓ Dataset downloaded"
-    else
-        echo "⚠ Auto-download failed. Manual download:"
-        echo "  wget http://storage.googleapis.com/gresearch/refraw360/360_v2.zip"
-        echo "  unzip 360_v2.zip -d datasets/"
-    fi
-else
-    echo "✓ Dataset already exists"
-fi
-echo ""
+
 
 #=============================================================================
-# 12. Final Verification
+# 11. Final Verification
 #=============================================================================
-echo "Step 12: Final verification"
+echo "Step 11: Final verification"
 python -c "
 import torch, gsplat, sam2, numpy, PIL
 print(f'✓ PyTorch: {torch.__version__} (CUDA: {torch.cuda.is_available()})')

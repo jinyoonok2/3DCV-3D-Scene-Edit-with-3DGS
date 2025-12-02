@@ -38,6 +38,30 @@ python 05c_optimize_to_targets.py --init_ckpt outputs/.../merged_with_object.pt 
 
 ---
 
+## Architecture
+
+### gsplat Integration
+This project uses a hybrid approach for 3D Gaussian Splatting:
+
+- **gsplat (pip)**: Core library installed via `pip install gsplat`
+  - Provides `gsplat.rasterization`, `gsplat.rendering`, `gsplat.strategy`
+  - Official, stable, optimized CUDA implementations
+
+- **gsplat-src (integrated)**: Source repository examples for dataset parsing
+  - `datasets/colmap.py`: COLMAP data parser with pycolmap 0.6.1 compatibility
+  - `utils.py`: Helper functions (`knn`, `rgb_to_sh`, `set_random_seed`)
+  - `fused_ssim`: Optimized SSIM loss for training
+  - **Why needed**: pip gsplat doesn't include dataset parsers or training utilities
+
+**Path injection**: All scripts use `sys.path.insert(0, "gsplat-src/examples")` to access dataset parsers while using pip gsplat for core functionality.
+
+### Dependencies
+- **requirements.txt**: Core project dependencies
+- **requirements-gsplat.txt**: gsplat-src example dependencies (pycolmap, fused-ssim)
+- **requirements-triposr.txt**: TripoSR mesh generation dependencies
+
+---
+
 ## Configuration System
 
 All modules support dual-mode operation: config file + CLI overrides.
