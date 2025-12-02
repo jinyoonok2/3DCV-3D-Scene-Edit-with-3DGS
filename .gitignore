@@ -16,7 +16,6 @@ ENV/
 
 # Data and external dependencies
 datasets/
-gsplat-src/
 GroundingDINO/
 sam2/
 
