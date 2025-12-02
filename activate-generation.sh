@@ -1,41 +1,43 @@
 #!/bin/bash
-# Activate the Phase 2 virtual environment for object generation (steps 06+)
+# Activate the virtual environment for Object Generation Phase (Steps 06-09)
 #
 # Usage:
 #   source activate-generation.sh
 
-VENV_PATH="./venv-gen"
+VENV_PATH="./venv-generation"
 
 # Check if virtual environment exists
 if [ ! -d "$VENV_PATH" ]; then
-    echo "❌ Phase 2 virtual environment not found: $VENV_PATH"
+    echo "❌ Virtual environment not found: $VENV_PATH"
     echo ""
-    echo "Please run Phase 2 setup first:"
-    echo "  ./setup_replacement.sh"
+    echo "Please run setup first:"
+    echo "  ./setup-generation.sh"
     return 1 2>/dev/null || exit 1
 fi
 
 # Check if activate script exists
 if [ ! -f "$VENV_PATH/bin/activate" ]; then
-    echo "❌ Phase 2 virtual environment activate script not found: $VENV_PATH/bin/activate"
+    echo "❌ Virtual environment activate script not found: $VENV_PATH/bin/activate"
     echo ""
-    echo "Please run Phase 2 setup first:"
-    echo "  ./setup_replacement.sh"
+    echo "Please run setup first:"
+    echo "  ./setup-generation.sh"
     return 1 2>/dev/null || exit 1
 fi
 
 # Activate virtual environment
 source "$VENV_PATH/bin/activate"
 
-echo "✓ Phase 2 virtual environment activated: $VENV_PATH"
+echo "✓ Object Generation environment activated: $VENV_PATH"
 echo ""
 echo "Python: $(python --version)"
 echo "Location: $(which python)"
 echo ""
-echo "Available for: Object Generation (steps 06-09)"
-echo "  06: Generate objects from text"
-echo "  07: Convert mesh to Gaussians"  
-echo "  08: Place object at ROI"
-echo "  09: Final visualization"
+echo "📋 Object Generation Pipeline (Steps 06-09):"
+echo "  06: python 06_generate_objects_from_text.py"
+echo "  07: python 07_convert_mesh_to_gaussians.py"
+echo "  08: python 08_place_object_at_roi.py"
+echo "  09: python 09_final_visualization.py"
+echo ""
+echo "💡 Prerequisites: Complete Object Removal phase (steps 00-05c) first"
 echo ""
 echo "To deactivate, run: deactivate"

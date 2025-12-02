@@ -2,38 +2,59 @@
 
 Text-guided 3D scene editing: **gsplat + SAM2 + GroundingDINO + TripoSR + SDXL**
 
-**Pipelines:**
-- **Object Removal** (00-05c): Train → Segment → Remove → Inpaint → Optimize
-- **Object Replacement** (06-09): Generate mesh → Convert to GS → Place at ROI → Optimize
+**Two-Phase Architecture:**
+- **Phase 1 - Object Removal** (00-05c): Train → Segment → Remove → Inpaint → Optimize
+- **Phase 2 - Object Generation** (06-09): Generate mesh → Convert to GS → Place at ROI → Optimize
 
 ---
 
 ## Quick Start
 
+### Setup
 ```bash
-# Setup
+# Clone and setup
 git clone https://github.com/jinyoonok2/3DCV-3D-Scene-Edit-with-3DGS
 cd 3DCV-3D-Scene-Edit-with-3DGS
-./setup.sh && source activate.sh
 
-# Initialize config
+# Phase 1: Object Removal Environment
+./setup-removal.sh
+source activate-removal.sh
+
+# Phase 2: Object Generation Environment (optional)
+./setup-generation.sh  
+source activate-generation.sh
+```
+
+### Phase 1: Object Removal Pipeline
+```bash
+# Activate removal environment
+source activate-removal.sh
+
+# Initialize project config
 python init_project.py --scene garden --dataset_root datasets/360_v2/garden
 
-# Object Removal Pipeline
+# Run pipeline steps
 python 00_check_dataset.py
 python 01_train_gs_initial.py
 python 02_render_training_views.py
 python 03_ground_text_to_masks.py --text "brown plant"
 python 04a_lift_masks_to_roi3d.py
+python 04b_visualize_roi.py  # Optional visualization
 python 05a_remove_and_render_holes.py
-python 05b_inpaint_holes.py
+python 05b_inpaint_holes_sdxl.py
 python 05c_optimize_to_targets.py
+```
 
-# Object Replacement Pipeline (optional)
-python 06_object_generation.py --image flower.png
-python 07_mesh_to_gaussians.py --mesh outputs/.../mesh.ply
-python 08_place_object_at_roi.py --object_gaussians outputs/.../gaussians.pt --roi outputs/.../roi.pt --scene_gaussians outputs/.../05c_optimized.pt
-python 05c_optimize_to_targets.py --init_ckpt outputs/.../merged_with_object.pt  # Reuse 05c for final optimization
+### Phase 2: Object Generation Pipeline (Future)
+```bash
+# Activate generation environment  
+source activate-generation.sh
+
+# Run generation steps (placeholder commands)
+python 06_generate_objects_from_text.py
+python 07_convert_mesh_to_gaussians.py
+python 08_place_object_at_roi.py
+python 09_final_visualization.py
 ```
 
 ---
@@ -55,10 +76,24 @@ This project uses a hybrid approach for 3D Gaussian Splatting:
 
 **Path injection**: All scripts use `sys.path.insert(0, "gsplat-src/examples")` to access dataset parsers while using pip gsplat for core functionality.
 
-### Dependencies
-- **requirements.txt**: Core project dependencies
-- **requirements-gsplat.txt**: gsplat-src example dependencies (pycolmap, fused-ssim)
-- **requirements-triposr.txt**: TripoSR mesh generation dependencies
+### Two-Phase Setup Architecture
+
+**Phase 1 - Object Removal (`setup-removal.sh`)**:
+- Creates `venv-removal/` environment
+- Installs: PyTorch, gsplat, SAM2, GroundingDINO, SDXL
+- Dependencies: `requirements.txt` + `requirements-gsplat.txt`
+- Handles steps 00-05c
+
+**Phase 2 - Object Generation (`setup-generation.sh`)**:
+- Creates `venv-generation/` by copying Phase 1 environment
+- Adds: TripoSR for 3D mesh generation
+- Dependencies: Phase 1 + `requirements-triposr.txt`
+- Handles steps 06-09
+
+**Environment Management**:
+- `source activate-removal.sh` - Activate Phase 1 environment
+- `source activate-generation.sh` - Activate Phase 2 environment
+- `--reset` flag available for both setup scripts (preserves datasets)
 
 ---
 
@@ -624,6 +659,52 @@ python 04a_lift_masks_to_roi3d.py --roi_thresh 0.01 # For maximum inclusiveness
 - ✅ **Solved**: Module 05a's depth comparison method is robust to incomplete ROI selection
 - The new approach asks "Was the ROI frontmost?" instead of "Did opacity change?"
 - Works correctly even if some inner Gaussians remain after deletion
+
+---
+
+## Project Structure
+
+```
+3DCV-3D-Scene-Edit-with-3DGS/
+├── Phase 1: Object Removal Pipeline
+│   ├── 00_check_dataset.py          # Dataset validation
+│   ├── 01_train_gs_initial.py       # Train baseline 3DGS
+│   ├── 02_render_training_views.py  # Render all training views
+│   ├── 03_ground_text_to_masks.py   # Text → object masks
+│   ├── 04a_lift_masks_to_roi3d.py   # 2D masks → 3D ROI
+│   ├── 04b_visualize_roi.py         # ROI visualization
+│   ├── 05a_remove_and_render_holes.py  # Remove objects
+│   ├── 05b_inpaint_holes_sdxl.py    # Inpaint with SDXL
+│   └── 05c_optimize_to_targets.py   # Final optimization
+│
+├── Phase 2: Object Generation Pipeline (Future)
+│   ├── 06_generate_objects_from_text.py  # Text → 3D mesh
+│   ├── 07_convert_mesh_to_gaussians.py  # Mesh → Gaussians
+│   ├── 08_place_object_at_roi.py        # Place at ROI
+│   └── 09_final_visualization.py        # Final render
+│
+├── Setup & Environment
+│   ├── setup-removal.sh             # Phase 1 environment setup
+│   ├── setup-generation.sh          # Phase 2 environment setup
+│   ├── activate-removal.sh          # Activate Phase 1 env
+│   ├── activate-generation.sh       # Activate Phase 2 env
+│   ├── requirements.txt             # Core dependencies
+│   ├── requirements-gsplat.txt      # gsplat-src dependencies
+│   └── requirements-triposr.txt     # TripoSR dependencies
+│
+├── Configuration & Utilities
+│   ├── init_project.py             # Initialize project config
+│   ├── config.yaml                 # Main configuration file
+│   ├── project_utils/              # Shared utilities
+│   └── download_datasets.sh        # Download MipNeRF-360
+│
+└── External Dependencies
+    ├── venv-removal/               # Phase 1 Python environment
+    ├── venv-generation/            # Phase 2 Python environment  
+    ├── gsplat-src/                 # gsplat source (dataset parsers)
+    ├── TripoSR/                    # TripoSR mesh generation
+    └── datasets/360_v2/            # MipNeRF-360 dataset
+```
 
 ---
 
