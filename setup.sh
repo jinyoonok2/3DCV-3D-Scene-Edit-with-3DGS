@@ -9,10 +9,7 @@
 
 set -e  # Exit on error
 
-# Initialize conda for bash
-eval "$(conda shell.bash hook)"
-
-ENV_NAME="3dgs"
+VENV_NAME="venv"
 RESET=false
 
 # Parse arguments
@@ -29,38 +26,36 @@ echo "=========================================="
 echo ""
 
 #=============================================================================
-# 1. Python Environment Setup (Conda)
+# 1. Python Environment Setup (venv)
 #=============================================================================
-echo "Step 1: Setting up conda environment"
+echo "Step 1: Setting up Python virtual environment"
 
-ENV_NAME="3dgs"
-
-# Check if conda is available
-if ! command -v conda &> /dev/null; then
-    echo "✗ Error: conda not found"
-    echo "  Please install Miniconda or Anaconda first"
-    echo "  Download: https://docs.conda.io/en/latest/miniconda.html"
+# Check Python version
+if ! command -v python3 &> /dev/null; then
+    echo "✗ Error: python3 not found"
     exit 1
 fi
 
-echo "  Using: $(conda --version)"
+PYTHON_VERSION=$(python3 --version 2>&1 | awk '{print $2}' | cut -d. -f1,2)
+echo "  Using Python $PYTHON_VERSION"
 
 # Handle reset
 if [ "$RESET" = true ]; then
-    conda env remove -n "$ENV_NAME" -y 2>/dev/null || true
-    echo "  Removed existing conda environment"
+    rm -rf "$VENV_NAME"
+    echo "  Removed existing virtual environment"
 fi
 
-# Create/activate conda environment
-if ! conda info --envs | grep -q "^$ENV_NAME "; then
-    conda create -n "$ENV_NAME" python=3.12 -y -q
-    echo "✓ Created new conda environment: $ENV_NAME"
+# Create virtual environment if it doesn't exist
+if [ ! -d "$VENV_NAME" ]; then
+    python3 -m venv "$VENV_NAME"
+    echo "✓ Created virtual environment: $VENV_NAME"
 else
-    echo "✓ Using existing conda environment: $ENV_NAME"
+    echo "✓ Using existing virtual environment: $VENV_NAME"
 fi
 
-# Activate environment
-conda activate "$ENV_NAME"
+# Activate virtual environment
+source "$VENV_NAME/bin/activate"
+echo "✓ Activated virtual environment"
 echo ""
 
 #=============================================================================
@@ -91,38 +86,27 @@ fi
 echo ""
 
 #=============================================================================
-# 4. CUDA Toolkit and PyTorch
+# 4. PyTorch with CUDA
 #=============================================================================
-echo "Step 4: Installing CUDA toolkit and PyTorch"
-
-# Install CUDA toolkit via conda
-if ! conda list | grep -q "cuda-toolkit"; then
-    echo "  Installing CUDA toolkit..."
-    conda install -c nvidia cuda-toolkit=12.6 -y -q
-    echo "✓ CUDA toolkit installed"
-else
-    echo "✓ CUDA toolkit already installed"
-fi
+echo "Step 4: Installing PyTorch with CUDA support"
 
 # Install PyTorch with CUDA support
 if python -c "import torch" 2>/dev/null; then
     TORCH_VER=$(python -c "import torch; print(torch.__version__)")
     TORCH_CUDA=$(python -c "import torch; print(torch.version.cuda if torch.cuda.is_available() else 'none')")
-    if [[ "$TORCH_CUDA" == "12.6" ]]; then
-        echo "✓ PyTorch $TORCH_VER (CUDA $TORCH_CUDA) already installed"
-    else
-        echo "  Installing PyTorch with CUDA 12.6..."
-        conda install pytorch torchvision torchaudio pytorch-cuda=12.6 -c pytorch -c nvidia -y -q
-        echo "✓ PyTorch installed"
-    fi
+    echo "✓ PyTorch $TORCH_VER (CUDA: $TORCH_CUDA) already installed"
 else
-    echo "  Installing PyTorch with CUDA 12.6..."
-    conda install pytorch torchvision torchaudio pytorch-cuda=12.6 -c pytorch -c nvidia -y -q
+    echo "  Installing PyTorch with CUDA 12.1..."
+    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
     echo "✓ PyTorch installed"
 fi
 
 # Verify CUDA
-python -c "import torch; assert torch.cuda.is_available(), 'CUDA not available!'; print(f'  Device: {torch.cuda.get_device_name(0)}'); print(f'  CUDA: {torch.version.cuda}'); print(f'  Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB')"
+if python -c "import torch; torch.cuda.is_available()" 2>/dev/null; then
+    python -c "import torch; print(f'  Device: {torch.cuda.get_device_name(0)}'); print(f'  CUDA: {torch.version.cuda}'); print(f'  Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB')"
+else
+    echo "⚠ CUDA not available - using CPU mode"
+fi
 echo ""
 
 #=============================================================================
@@ -197,38 +181,10 @@ echo ""
 #=============================================================================
 echo "Step 9: Installing gsplat-src example dependencies"
 
-# Find CUDA toolkit for fused-ssim compilation
-CUDA_HOME=""
-if command -v nvcc &> /dev/null; then
-    NVCC_PATH=$(which nvcc)
-    CUDA_HOME=$(dirname $(dirname "$NVCC_PATH"))
-    echo "  Found CUDA: $CUDA_HOME"
-elif [ -f "/usr/local/cuda/bin/nvcc" ]; then
-    CUDA_HOME="/usr/local/cuda"
-    echo "  Found CUDA: $CUDA_HOME"
-fi
-
-if [ -z "$CUDA_HOME" ] || [ ! -f "$CUDA_HOME/bin/nvcc" ]; then
-    echo "⚠ Warning: nvcc not found"
-    echo "  fused-ssim (from gsplat-src examples) requires CUDA toolkit"
-    echo "  Install: conda install -c nvidia cuda-toolkit"
-    echo "  Installing gsplat-src example dependencies without fused-ssim..."
-    if [ -f "requirements-gsplat.txt" ]; then
-        grep -v "fused-ssim" requirements-gsplat.txt | pip install -r /dev/stdin
-    fi
-else
-    export CUDA_HOME
-    export PATH="$CUDA_HOME/bin:$PATH"
-    export LD_LIBRARY_PATH="$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
-    export TORCH_CUDA_ARCH_LIST="8.9+PTX"
-    export FORCE_CUDA=1
-    
-    # Install all gsplat-src example dependencies with --no-build-isolation
-    if [ -f "requirements-gsplat.txt" ]; then
-        pip install --no-build-isolation -r requirements-gsplat.txt || \
-        echo "  ⚠ Some gsplat-src example packages failed (may be optional)"
-    fi
-    
+# Install gsplat dependencies
+if [ -f "requirements-gsplat.txt" ]; then
+    echo "  Installing gsplat example dependencies..."
+    pip install -r requirements-gsplat.txt
     echo "✓ gsplat-src example dependencies installed"
 fi
 echo ""
@@ -265,7 +221,7 @@ echo "=========================================="
 echo ""
 echo "Activate environment:"
 echo "  source activate.sh"
-echo "  OR: conda activate 3dgs"
+echo "  OR: source venv/bin/activate"
 echo ""
 echo "Next steps:"
 echo "  1. Upload trained checkpoint to: outputs/<project>/01_gs_base/ckpt_initial.pt"
