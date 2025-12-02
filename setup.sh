@@ -9,11 +9,8 @@
 
 set -e  # Exit on error
 
-# Function to ensure conda environment is active
-activate_conda_env() {
-    source "$(conda info --base)/etc/profile.d/conda.sh"
-    conda activate "$ENV_NAME"
-}
+# Initialize conda for bash
+eval "$(conda shell.bash hook)"
 
 ENV_NAME="3dgs"
 RESET=false
@@ -63,7 +60,7 @@ else
 fi
 
 # Activate environment
-activate_conda_env
+conda activate "$ENV_NAME"
 echo ""
 
 #=============================================================================
@@ -132,8 +129,6 @@ echo ""
 # 5. gsplat (pip package)
 #=============================================================================
 echo "Step 5: Installing gsplat from pip"
-# Ensure we're in the right conda environment
-activate_conda_env
 if python -c "import gsplat" 2>/dev/null; then
     echo "✓ gsplat already installed: $(python -c 'import gsplat; print(gsplat.__version__)')"
 else
@@ -174,8 +169,6 @@ echo ""
 # 7. Core Project Requirements
 #=============================================================================
 echo "Step 7: Installing core project requirements"
-# Ensure we're in the right conda environment
-activate_conda_env
 if [ -f "requirements.txt" ]; then
     pip install -r requirements.txt
     echo "✓ Core requirements installed"
@@ -186,8 +179,6 @@ echo ""
 # 8. TripoSR Dependencies
 #=============================================================================
 echo "Step 8: Installing TripoSR dependencies"
-# Ensure we're in the right conda environment
-activate_conda_env
 if [ -f "requirements-triposr.txt" ]; then
     pip install -r requirements-triposr.txt
     echo "✓ TripoSR dependencies installed"
@@ -205,8 +196,6 @@ echo ""
 # 9. gsplat-src Example Dependencies (with CUDA extensions)
 #=============================================================================
 echo "Step 9: Installing gsplat-src example dependencies"
-# Ensure we're in the right conda environment
-activate_conda_env
 
 # Find CUDA toolkit for fused-ssim compilation
 CUDA_HOME=""
