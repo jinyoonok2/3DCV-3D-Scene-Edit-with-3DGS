@@ -9,5 +9,9 @@ omegaconf
 pyglet<2
 gdown
 
+# Version constraints to prevent conflicts with simple-lama-inpainting
+numpy<2.0.0,>=1.24.3
+Pillow>=9.5.0,<10.0.0
+
 # 3D mesh processing
 # git+https://github.com/tatsy/torchmcubes.git  # Commented out - causes CUDA compilation issues
