@@ -159,36 +159,36 @@ fi
 echo ""
 
 #=============================================================================
-# 7. Project Requirements
+# 7. Core Project Requirements
 #=============================================================================
-echo "Step 7: Installing project requirements"
+echo "Step 7: Installing core project requirements"
 if [ -f "requirements.txt" ]; then
     pip install -r requirements.txt
-    echo "✓ Project requirements installed"
+    echo "✓ Core requirements installed"
 fi
 echo ""
 
 #=============================================================================
-# 8. Additional Dependencies
+# 8. TripoSR Dependencies
 #=============================================================================
-echo "Step 8: Installing additional dependencies"
+echo "Step 8: Installing TripoSR dependencies"
+if [ -f "requirements-triposr.txt" ]; then
+    pip install -r requirements-triposr.txt
+    echo "✓ TripoSR dependencies installed"
+fi
 
-# SAM2
+# SAM2 (separate install due to potential conflicts)
 if ! python -c "import sam2" 2>/dev/null; then
     pip install git+https://github.com/facebookresearch/segment-anything-2.git
     echo "✓ SAM2 installed"
 fi
-
-# TripoSR dependencies
-pip install rembg==2.0.59 xatlas==0.0.9 trimesh onnxruntime einops omegaconf "pyglet<2" gdown
-pip install git+https://github.com/tatsy/torchmcubes.git
 echo "✓ Additional dependencies installed"
 echo ""
 
 #=============================================================================
-# 9. gsplat Examples Requirements (with CUDA extensions)
+# 9. gsplat Dependencies (with CUDA extensions)
 #=============================================================================
-echo "Step 9: Installing gsplat examples requirements"
+echo "Step 9: Installing gsplat dependencies"
 
 # Find CUDA toolkit
 CUDA_HOME=""
@@ -203,9 +203,12 @@ fi
 
 if [ -z "$CUDA_HOME" ] || [ ! -f "$CUDA_HOME/bin/nvcc" ]; then
     echo "⚠ Warning: nvcc not found"
-    echo "  fused-ssim and fused-bilagrid require CUDA toolkit"
+    echo "  fused-ssim requires CUDA toolkit"
     echo "  Install: conda install -c nvidia cuda-toolkit"
-    echo "  Skipping fused packages (optional performance optimizations)"
+    echo "  Installing gsplat dependencies without fused-ssim..."
+    if [ -f "requirements-gsplat.txt" ]; then
+        grep -v "fused-ssim" requirements-gsplat.txt | pip install -r /dev/stdin
+    fi
 else
     export CUDA_HOME
     export PATH="$CUDA_HOME/bin:$PATH"
@@ -213,25 +216,13 @@ else
     export TORCH_CUDA_ARCH_LIST="8.9+PTX"
     export FORCE_CUDA=1
     
-    # Install gsplat examples requirements (excluding fused packages)
-    if [ -f "gsplat-src/examples/requirements.txt" ]; then
-        grep -v "fused-ssim" gsplat-src/examples/requirements.txt | \
-        grep -v "fused-bilagrid" | \
-        pip install -r /dev/stdin
+    # Install all gsplat dependencies with --no-build-isolation
+    if [ -f "requirements-gsplat.txt" ]; then
+        pip install --no-build-isolation -r requirements-gsplat.txt || \
+        echo "  ⚠ Some gsplat packages failed (may be optional)"
     fi
     
-    # Install fused packages with --no-build-isolation
-    echo "  Building fused-ssim..."
-    pip install --no-build-isolation \
-        git+https://github.com/rahul-goel/fused-ssim@328dc9836f513d00c4b5bc38fe30478b4435cbb5 || \
-        echo "  ⚠ fused-ssim failed (optional)"
-    
-    echo "  Building fused-bilagrid..."
-    pip install --no-build-isolation \
-        git+https://github.com/harry7557558/fused-bilagrid@90f9788e57d3545e3a033c1038bb9986549632fe || \
-        echo "  ⚠ fused-bilagrid failed (optional)"
-    
-    echo "✓ gsplat examples dependencies installed"
+    echo "✓ gsplat dependencies installed"
 fi
 echo ""
 

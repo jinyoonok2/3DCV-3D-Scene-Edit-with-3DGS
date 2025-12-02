@@ -1,0 +1,13 @@
+# TripoSR image-to-3D mesh generation dependencies
+tsr
+trimesh
+rembg[gpu]==2.0.59
+xatlas==0.0.9
+onnxruntime
+einops
+omegaconf
+pyglet<2
+gdown
+
+# 3D mesh processing
+git+https://github.com/tatsy/torchmcubes.git
