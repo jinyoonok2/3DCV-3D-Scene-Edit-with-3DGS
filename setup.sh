@@ -138,6 +138,20 @@ else
     echo "✓ gsplat-src exists"
 fi
 
+# Fix pycolmap API compatibility in gsplat examples
+COLMAP_FILE="gsplat-src/examples/datasets/colmap.py"
+if [ -f "$COLMAP_FILE" ]; then
+    # Update import and API calls for pycolmap 0.6.1+
+    sed -i 's/from pycolmap import SceneManager/from pycolmap import Reconstruction/' "$COLMAP_FILE"
+    sed -i 's/manager = SceneManager(colmap_dir)/reconstruction = Reconstruction()\n        reconstruction.read(colmap_dir)/' "$COLMAP_FILE"
+    sed -i 's/manager\.load_cameras()//' "$COLMAP_FILE"
+    sed -i 's/manager\.load_images()//' "$COLMAP_FILE"
+    sed -i 's/manager\.load_points3D()//' "$COLMAP_FILE"
+    sed -i 's/imdata = manager\.images/imdata = reconstruction.images/' "$COLMAP_FILE"
+    sed -i 's/manager\.cameras/reconstruction.cameras/g' "$COLMAP_FILE"
+    echo "✓ Fixed pycolmap API compatibility"
+fi
+
 # GroundingDINO for config files
 if [ ! -d "GroundingDINO" ]; then
     git clone https://github.com/IDEA-Research/GroundingDINO.git -q
