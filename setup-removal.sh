@@ -9,7 +9,7 @@
 
 set -e  # Exit on error
 
-VENV_NAME="venv"
+VENV_NAME="venv-removal"
 RESET=false
 
 # Parse arguments
@@ -247,15 +247,19 @@ echo "=========================================="
 echo ""
 echo "Next steps:"
 echo "1. Run scripts 00-05c for object removal"
-echo "2. After completing removal, run ./setup_replacement.sh"
-echo "   to add object generation capabilities (06+)"
+echo "2. After completing removal, run ./setup-generation.sh"
+echo "   to add object generation capabilities (06-09)"
 echo ""
 echo "Activate environment:"
-echo "  source activate.sh"
-echo "  OR: source venv/bin/activate"
+echo "  source activate-removal.sh"
 echo ""
-echo "Next steps:"
-echo "  1. Upload trained checkpoint to: outputs/<project>/01_gs_base/ckpt_initial.pt"
-echo "  2. Upload masks to: outputs/<project>/round_001/masks_<object>/sam_masks/"
-echo "  3. Run pipeline: python 04a_lift_masks_to_roi3d.py --ckpt ... --masks_root ..."
+echo "Ready to run pipeline:"
+echo "  python 00_check_dataset.py"
+echo "  python 01_train_gs_initial.py"
+echo "  python 02_render_training_views.py"
+echo "  python 03_ground_text_to_masks.py"
+echo "  python 04a_lift_masks_to_roi3d.py"
+echo "  python 05a_remove_and_render_holes.py"
+echo "  python 05b_inpaint_holes_sdxl.py"
+echo "  python 05c_optimize_to_targets.py"
 echo ""

@@ -6,15 +6,15 @@
 
 set -e  # Exit on error
 
-VENV_REMOVAL="venv"           # Phase 1 environment
-VENV_GENERATION="venv-gen"    # Phase 2 environment
+VENV_REMOVAL="venv-removal"      # Phase 1 environment
+VENV_GENERATION="venv-generation"  # Phase 2 environment
 RESET=false
 
 # Parse arguments
 for arg in "$@"; do
     case $arg in
         --reset|-r) RESET=true; shift ;;
-        *) echo "Usage: ./setup_replacement.sh [--reset]"; exit 1 ;;
+        *) echo "Usage: ./setup-generation.sh [--reset]"; exit 1 ;;
     esac
 done
 
@@ -27,7 +27,7 @@ echo ""
 # Check if Phase 1 environment exists
 if [ ! -d "$VENV_REMOVAL" ]; then
     echo "❌ Error: Phase 1 environment not found!"
-    echo "Please run ./setup.sh first to set up the object removal pipeline."
+    echo "Please run ./setup-removal.sh first to set up the object removal pipeline."
     exit 1
 fi
 
@@ -128,6 +128,6 @@ echo "• Object Removal: source $VENV_REMOVAL/bin/activate"
 echo "• Object Generation: source $VENV_GENERATION/bin/activate"
 echo ""
 echo "Or use the activate scripts:"
-echo "• source activate.sh              # Phase 1 (object removal)"
+echo "• source activate-removal.sh      # Phase 1 (object removal)"
 echo "• source activate-generation.sh   # Phase 2 (object generation)"
 echo ""
