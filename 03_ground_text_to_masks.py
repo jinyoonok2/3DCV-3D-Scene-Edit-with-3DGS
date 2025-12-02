@@ -648,18 +648,36 @@ def main():
     print(f"Processing {len(image_files)} images...")
     print()
     
-    # Parse reference box once (not normalized yet - will be done per-image)
+    # Parse reference box (CLI overrides config)
     ref_box_template = None
+    ref_box_normalized = args.reference_box_normalized
+    ref_overlap_thresh = args.reference_overlap_thresh
+    
     if args.reference_box is not None:
+        # Use CLI reference box
         try:
             ref_box_template = [float(x) for x in args.reference_box.strip('[]').split(',')]
             if len(ref_box_template) != 4:
                 print(f"WARNING: reference_box must have 4 values, got {len(ref_box_template)}")
                 ref_box_template = None
             else:
-                print(f"Using reference box: {ref_box_template} ({'normalized' if args.reference_box_normalized else 'pixels'})")
+                print(f"Using CLI reference box: {ref_box_template} ({'normalized' if ref_box_normalized else 'pixels'})")
         except Exception as e:
             print(f"WARNING: Failed to parse reference_box: {e}")
+            ref_box_template = None
+    elif config.segmentation.get('reference_box') is not None:
+        # Use config reference box
+        try:
+            ref_box_template = config.segmentation.reference_box
+            if len(ref_box_template) != 4:
+                print(f"WARNING: config reference_box must have 4 values, got {len(ref_box_template)}")
+                ref_box_template = None
+            else:
+                ref_box_normalized = config.segmentation.get('reference_box_normalized', False)
+                ref_overlap_thresh = config.segmentation.get('reference_overlap_thresh', 0.8)
+                print(f"Using config reference box: {ref_box_template} ({'normalized' if ref_box_normalized else 'pixels'})")
+        except Exception as e:
+            print(f"WARNING: Failed to parse config reference_box: {e}")
             ref_box_template = None
     
     # Load per-image selection/manual box files if provided
@@ -712,7 +730,7 @@ def main():
             # Parse reference box for this image (convert to pixel coords if needed)
             ref_box = None
             if ref_box_template is not None:
-                if args.reference_box_normalized:
+                if ref_box_normalized:
                     ref_box = [ref_box_template[0] * w, ref_box_template[1] * h, 
                               ref_box_template[2] * w, ref_box_template[3] * h]
                 else:
@@ -723,7 +741,7 @@ def main():
             if ref_box is not None and len(boxes) > 0:
                 for i, box in enumerate(boxes):
                     overlap = compute_box_overlap(box, ref_box)
-                    if overlap >= args.reference_overlap_thresh:
+                    if overlap >= ref_overlap_thresh:
                         filtered_indices.append(i)
                 
                 if len(filtered_indices) > 0:
@@ -933,8 +951,8 @@ def main():
             "select_index_file": args.select_index_file,
             "manual_box_file": args.manual_box_file,
             "reference_box": args.reference_box,
-            "reference_box_normalized": args.reference_box_normalized,
-            "reference_overlap_thresh": args.reference_overlap_thresh,
+            "reference_box_normalized": ref_box_normalized,
+            "reference_overlap_thresh": ref_overlap_thresh,
             "dino_selection": args.dino_selection,
             "sam_selection": args.sam_selection,
             "sam_thresh": args.sam_thresh,

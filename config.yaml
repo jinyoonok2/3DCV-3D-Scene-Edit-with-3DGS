@@ -59,6 +59,11 @@ segmentation:
   nms_threshold: 0.8                       # Non-maximum suppression
   sam_model: "sam2_hiera_large"            # SAM2 model variant
   
+  # Spatial filtering (optional)
+  reference_box: [0.3, 0.2, 0.7, 0.8]     # [x1,y1,x2,y2] reference box for spatial filtering
+  reference_box_normalized: true           # If true, coordinates are [0-1], else pixels
+  reference_overlap_thresh: 0.8            # Minimum overlap with reference box (0.0-1.0)
+  
 roi:
   threshold: 0.01                          # ROI weight threshold for deletion (lower = more permissive)
   min_views: 3                             # Min views for Gaussian to be in ROI
