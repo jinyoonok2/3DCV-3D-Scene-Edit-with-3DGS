@@ -1,23 +1,33 @@
 #!/bin/bash
-# Activate the virtual environment for 3DGS Scene Editing project
+# Activate the conda environment for 3DGS Scene Editing project
 #
 # Usage:
 #   source activate.sh
 
-VENV_DIR="venv"
+ENV_NAME="3dgs"
 
-if [ ! -d "$VENV_DIR" ]; then
-    echo "❌ Virtual environment not found at: $VENV_DIR"
+# Check if conda is available
+if ! command -v conda &> /dev/null; then
+    echo "❌ conda not found"
+    echo ""
+    echo "Please install Miniconda/Anaconda first"
+    return 1 2>/dev/null || exit 1
+fi
+
+# Check if environment exists
+if ! conda info --envs | grep -q "^$ENV_NAME "; then
+    echo "❌ Conda environment not found: $ENV_NAME"
     echo ""
     echo "Please run setup first:"
     echo "  ./setup.sh"
     return 1 2>/dev/null || exit 1
 fi
 
-# Activate virtual environment
-source "$VENV_DIR/bin/activate"
+# Activate conda environment
+source "$(conda info --base)/etc/profile.d/conda.sh"
+conda activate "$ENV_NAME"
 
-echo "✓ Virtual environment activated: $VENV_DIR"
+echo "✓ Conda environment activated: $ENV_NAME"
 echo ""
 echo "Python: $(python --version)"
 echo "Location: $(which python)"

@@ -9,7 +9,7 @@
 
 set -e  # Exit on error
 
-VENV_DIR="venv"
+ENV_NAME="3dgs"
 RESET=false
 
 # Parse arguments
@@ -26,39 +26,39 @@ echo "=========================================="
 echo ""
 
 #=============================================================================
-# 1. Python Environment Setup
+# 1. Python Environment Setup (Conda)
 #=============================================================================
-echo "Step 1: Setting up Python environment"
+echo "Step 1: Setting up conda environment"
 
-# Find suitable Python version (prefer 3.10, fallback to 3.12)
-PYTHON_CMD=""
-if command -v python3.10 &> /dev/null; then
-    PYTHON_CMD="python3.10"
-elif command -v python3.12 &> /dev/null; then
-    PYTHON_CMD="python3.12"
-else
-    echo "✗ Error: Python 3.10 or 3.12 required"
-    echo "  Install: sudo apt install python3.10 python3.10-venv python3.10-dev"
+ENV_NAME="3dgs"
+
+# Check if conda is available
+if ! command -v conda &> /dev/null; then
+    echo "✗ Error: conda not found"
+    echo "  Please install Miniconda or Anaconda first"
+    echo "  Download: https://docs.conda.io/en/latest/miniconda.html"
     exit 1
 fi
-echo "  Using: $PYTHON_CMD"
+
+echo "  Using: $(conda --version)"
 
 # Handle reset
-if [ "$RESET" = true ] && [ -d "$VENV_DIR" ]; then
-    rm -rf "$VENV_DIR"
-    echo "  Removed existing venv"
+if [ "$RESET" = true ]; then
+    conda env remove -n "$ENV_NAME" -y 2>/dev/null || true
+    echo "  Removed existing conda environment"
 fi
 
-# Create/activate venv
-if [ ! -d "$VENV_DIR" ]; then
-    $PYTHON_CMD -m venv "$VENV_DIR"
-    source "$VENV_DIR/bin/activate"
-    pip install --upgrade pip setuptools wheel -q
-    echo "✓ Created new virtual environment"
+# Create/activate conda environment
+if ! conda info --envs | grep -q "^$ENV_NAME "; then
+    conda create -n "$ENV_NAME" python=3.10 -y -q
+    echo "✓ Created new conda environment: $ENV_NAME"
 else
-    source "$VENV_DIR/bin/activate"
-    echo "✓ Using existing virtual environment"
+    echo "✓ Using existing conda environment: $ENV_NAME"
 fi
+
+# Activate environment
+source "$(conda info --base)/etc/profile.d/conda.sh"
+conda activate "$ENV_NAME"
 echo ""
 
 #=============================================================================
@@ -89,22 +89,33 @@ fi
 echo ""
 
 #=============================================================================
-# 4. PyTorch with CUDA 12.6
+# 4. CUDA Toolkit and PyTorch
 #=============================================================================
-echo "Step 4: Installing PyTorch (CUDA 12.6)"
+echo "Step 4: Installing CUDA toolkit and PyTorch"
+
+# Install CUDA toolkit via conda
+if ! conda list | grep -q "cuda-toolkit"; then
+    echo "  Installing CUDA toolkit..."
+    conda install -c nvidia cuda-toolkit=12.6 -y -q
+    echo "✓ CUDA toolkit installed"
+else
+    echo "✓ CUDA toolkit already installed"
+fi
+
+# Install PyTorch with CUDA support
 if python -c "import torch" 2>/dev/null; then
     TORCH_VER=$(python -c "import torch; print(torch.__version__)")
     TORCH_CUDA=$(python -c "import torch; print(torch.version.cuda if torch.cuda.is_available() else 'none')")
     if [[ "$TORCH_CUDA" == "12.6" ]]; then
         echo "✓ PyTorch $TORCH_VER (CUDA $TORCH_CUDA) already installed"
     else
-        echo "  Reinstalling PyTorch with CUDA 12.6..."
-        pip uninstall -y torch torchvision torchaudio
-        pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
+        echo "  Installing PyTorch with CUDA 12.6..."
+        conda install pytorch torchvision torchaudio pytorch-cuda=12.6 -c pytorch -c nvidia -y -q
         echo "✓ PyTorch installed"
     fi
 else
-    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
+    echo "  Installing PyTorch with CUDA 12.6..."
+    conda install pytorch torchvision torchaudio pytorch-cuda=12.6 -c pytorch -c nvidia -y -q
     echo "✓ PyTorch installed"
 fi
 
@@ -280,6 +291,7 @@ echo "=========================================="
 echo ""
 echo "Activate environment:"
 echo "  source activate.sh"
+echo "  OR: conda activate 3dgs"
 echo ""
 echo "Next steps:"
 echo "  1. Upload trained checkpoint to: outputs/<project>/01_gs_base/ckpt_initial.pt"
