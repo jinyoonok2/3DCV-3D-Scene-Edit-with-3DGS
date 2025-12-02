@@ -10,4 +10,4 @@ pyglet<2
 gdown
 
 # 3D mesh processing
-git+https://github.com/tatsy/torchmcubes.git
+# git+https://github.com/tatsy/torchmcubes.git  # Commented out - causes CUDA compilation issues

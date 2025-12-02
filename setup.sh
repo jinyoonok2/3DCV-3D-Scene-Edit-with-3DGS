@@ -187,6 +187,14 @@ if [ -f "requirements-gsplat.txt" ]; then
     pip install -r requirements-gsplat.txt
     echo "✓ gsplat-src example dependencies installed"
 fi
+
+# Install fused-ssim separately (optional performance optimization)
+echo "  Installing fused-ssim (performance optimization)..."
+if pip install --no-build-isolation git+https://github.com/rahul-goel/fused-ssim@328dc9836f513d00c4b5bc38fe30478b4435cbb5; then
+    echo "✓ fused-ssim installed successfully"
+else
+    echo "⚠ fused-ssim installation failed (CUDA compilation issues) - continuing without it"
+fi
 echo ""
 
 #=============================================================================

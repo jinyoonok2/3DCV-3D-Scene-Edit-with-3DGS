@@ -18,4 +18,4 @@ tensorly
 splines
 
 # Performance optimizations (requires CUDA toolkit)
-git+https://github.com/rahul-goel/fused-ssim@328dc9836f513d00c4b5bc38fe30478b4435cbb5
+# git+https://github.com/rahul-goel/fused-ssim@328dc9836f513d00c4b5bc38fe30478b4435cbb5  # Install separately due to CUDA compilation issues
