@@ -317,15 +317,9 @@ def save_merged_scene(merged_gaussians, output_path, metadata):
     }
     torch.save(checkpoint, output_path)
     
-    # Save metadata JSON
-    manifest_path = output_path.parent / "manifest.json"
-    with open(manifest_path, 'w') as f:
-        json.dump(metadata, f, indent=2)
-    
     console.print(f"\n[green]✓[/green] Object placement complete!")
     console.print(f"Output: {output_path}")
     console.print(f"  - Merged scene: {len(merged_gaussians['means'])} Gaussians")
-    console.print(f"  - Manifest: {manifest_path}")
 
 
 def main():
@@ -367,39 +361,49 @@ def main():
     # Merge with scene
     merged_gaussians = merge_gaussians(scene_gaussians, transformed_object)
     
-    # Determine output path
+    # Determine output path using unified structure
     if args.output:
         output_path = Path(args.output)
     else:
-        # Default: save in round_001 directory
+        # Use unified structure: scene_placement module
         config = ProjectConfig(args.config)
-        project_name = config.get("project", "name") or "garden"
-        round_name = config.get("round_name") or "round_001"
-        output_path = Path(f"outputs/{project_name}/{round_name}/08_merged_scene.pt")
+        output_path = config.get_checkpoint_path('merged')
     
     # Prepare metadata
     metadata = {
         "module": "08_place_object_at_roi",
         "timestamp": datetime.now().isoformat(),
         "config_file": args.config,
-        "parameters": {
+        "inputs": {
             "object_gaussians": str(args.object_gaussians),
             "roi": str(args.roi),
             "scene_gaussians": str(args.scene_gaussians),
+            "original_scene": str(args.original_scene) if args.original_scene else "inferred from config",
+        },
+        "parameters": {
             "scale_factor": args.scale_factor,
             "placement": args.placement,
             "z_offset": args.z_offset,
             "rotation_degrees": args.rotation_degrees,
+            "no_scale": args.no_scale,
+            "manual_scale": args.manual_scale,
         },
-        "statistics": {
+        "results": {
             "num_scene_gaussians": len(scene_gaussians["means"]),
             "num_object_gaussians": len(transformed_object["means"]),
             "num_total_gaussians": len(merged_gaussians["means"]),
+        },
+        "outputs": {
+            "merged_checkpoint": str(output_path),
         },
     }
     
     # Save merged scene
     save_merged_scene(merged_gaussians, output_path, metadata)
+    
+    # Save manifest using unified system
+    config = ProjectConfig(args.config)
+    config.save_manifest("08_place_object_at_roi", metadata)
     
     console.print(f"\n[cyan]Next step:[/cyan] Run Module 09 to optimize the merged scene:")
     console.print(f"  python 09_final_optimization.py \\")

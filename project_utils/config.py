@@ -64,12 +64,37 @@ class ProjectConfig:
         if self.config.get('replacement', {}).get('enabled', False):
             dirs_to_create.extend([
                 self.get_path('object_generation'),
-                self.get_path('scene_merge'),
-                self.get_path('evaluation'),
+                self.get_path('mesh_conversion'),
+                self.get_path('scene_placement'),
+                self.get_path('final_optimization'),
             ])
         
         for dir_path in dirs_to_create:
             dir_path.mkdir(parents=True, exist_ok=True)
+            
+            # Create module-specific subdirectories
+            self._create_module_subdirs(dir_path)
+            
+    def _create_module_subdirs(self, module_path: Path):
+        """Create subdirectories within a module based on its type"""
+        module_name = module_path.name
+        output_config = self.config.get('output', {})
+        subdirs = output_config.get('subdirs', {})
+        
+        # Create renders subdirs for relevant modules
+        if any(x in module_name for x in ['render', 'training', 'editing', 'optimization']):
+            for subdir in subdirs.get('renders', ['train', 'val']):
+                (module_path / 'renders' / subdir).mkdir(parents=True, exist_ok=True)
+                
+        # Create masks subdirs for mask-related modules
+        if 'mask' in module_name or 'roi' in module_name:
+            for subdir in subdirs.get('masks', ['sam_masks', 'projected_masks']):
+                (module_path / subdir).mkdir(parents=True, exist_ok=True)
+                
+        # Create model subdirs for training modules
+        if any(x in module_name for x in ['training', 'optimization']):
+            for subdir in subdirs.get('models', ['checkpoints', 'metrics']):
+                (module_path / subdir).mkdir(parents=True, exist_ok=True)
             
     def get_path(self, key: str, *subpaths) -> Path:
         """
@@ -154,32 +179,145 @@ class ProjectConfig:
         if 'project' not in manifest_data:
             manifest_data['project'] = self.config['project']
         
-        # Save to logs directory
+        # Save to central logs directory
         log_path = self.get_path('logs') / f'{module_name}_manifest.json'
         with open(log_path, 'w') as f:
             json.dump(manifest_data, f, indent=2)
+        
+        # Also save locally if enabled
+        output_config = self.config.get('output', {})
+        if output_config.get('save_manifests_local', True):
+            # Try to determine module directory from name
+            module_dir = self._get_module_dir_from_name(module_name)
+            if module_dir:
+                local_manifest = module_dir / 'manifest.json'
+                with open(local_manifest, 'w') as f:
+                    json.dump(manifest_data, f, indent=2)
+                    
+        # Create module summary if enabled
+        if output_config.get('create_summaries', True):
+            self._create_module_summary(module_name, manifest_data)
             
         print(f"✓ Saved manifest: {log_path}")
         
     def get_checkpoint_path(self, stage: str = 'initial') -> Path:
         """
-        Get path to checkpoint for a specific stage
+        Get standardized checkpoint path using unified naming
         
         Args:
-            stage: Stage name (initial, holed, final)
+            stage: Checkpoint stage ('initial', 'holed', 'patched', 'merged', 'final', etc.)
             
         Returns:
             Path to checkpoint
         """
+        prefix = self.config.get('output', {}).get('checkpoint_prefix', 'ckpt_')
+        
         if stage == 'initial':
-            return self.get_path('initial_training', 'ckpt_initial.pt')
+            return self.get_path('initial_training') / f'{prefix}initial.pt'
         elif stage == 'holed':
-            return self.get_path('inpainting', 'holed', 'ckpt_holed.pt')
+            return self.get_path('inpainting') / f'{prefix}holed.pt'
+        elif stage == 'patched':
+            return self.get_path('inpainting') / f'{prefix}patched.pt'
+        elif stage == 'merged':
+            return self.get_path('scene_placement') / f'{prefix}merged.pt'
         elif stage == 'final':
-            return self.get_path('inpainting', 'optimized', 'ckpt_final.pt')
+            return self.get_path('final_optimization') / f'{prefix}final.pt'
         else:
-            raise ValueError(f"Unknown stage: {stage}")
+            # Generic checkpoint in appropriate module
+            return self.get_path('initial_training') / f'{prefix}{stage}.pt'
     
+    def _get_module_dir_from_name(self, module_name: str):
+        """Get module directory path from module name"""
+        # Map module names to config path keys
+        module_mapping = {
+            '00_check_dataset': 'dataset_check',
+            '01_train_gs_initial': 'initial_training',
+            '02_render_training_views': 'renders',
+            '03_ground_text_to_masks': 'masks',
+            '04a_lift_masks_to_roi3d': 'roi',
+            '04b_visualize_roi': 'roi',
+            '05a_remove_and_render_holes': 'inpainting',
+            '05b_inpaint_holes': 'inpainting',
+            '05c_optimize_to_targets': 'inpainting',
+            '06_object_generation': 'object_generation',
+            '07_mesh_to_gaussians': 'mesh_conversion',
+            '08_place_object_at_roi': 'scene_placement',
+            '09_final_optimization': 'final_optimization',
+        }
+        
+        path_key = module_mapping.get(module_name)
+        return self.get_path(path_key) if path_key else None
+        
+    def _create_module_summary(self, module_name: str, manifest_data: Dict):
+        """Create a README.md summary for the module"""
+        module_dir = self._get_module_dir_from_name(module_name)
+        if not module_dir:
+            return
+            
+        readme_path = module_dir / 'README.md'
+        
+        # Generate summary content
+        content = f"# {module_name.replace('_', ' ').title()}\n\n"
+        content += f"**Generated:** {manifest_data.get('timestamp', 'Unknown')}\n\n"
+        
+        if 'inputs' in manifest_data:
+            content += "## Inputs\n"
+            for key, value in manifest_data['inputs'].items():
+                content += f"- **{key}**: `{value}`\n"
+            content += "\n"
+            
+        if 'parameters' in manifest_data:
+            content += "## Parameters\n"
+            for key, value in manifest_data['parameters'].items():
+                content += f"- **{key}**: {value}\n"
+            content += "\n"
+            
+        if 'outputs' in manifest_data:
+            content += "## Outputs\n"
+            for key, value in manifest_data['outputs'].items():
+                if isinstance(value, list):
+                    content += f"- **{key}**: {len(value)} files\n"
+                else:
+                    content += f"- **{key}**: `{value}`\n"
+            content += "\n"
+            
+        if 'metrics' in manifest_data or 'results' in manifest_data:
+            content += "## Results\n"
+            results = manifest_data.get('metrics', manifest_data.get('results', {}))
+            for key, value in results.items():
+                if isinstance(value, (int, float)):
+                    content += f"- **{key}**: {value:.4f}\n"
+                else:
+                    content += f"- **{key}**: {value}\n"
+            content += "\n"
+            
+        # List actual files in directory
+        content += "## Files in Directory\n"
+        try:
+            for item in sorted(module_dir.iterdir()):
+                if item.name != 'README.md':
+                    if item.is_dir():
+                        file_count = len(list(item.rglob('*.*')))
+                        content += f"- 📁 `{item.name}/` ({file_count} files)\n"
+                    else:
+                        size_mb = item.stat().st_size / (1024 * 1024)
+                        content += f"- 📄 `{item.name}` ({size_mb:.1f} MB)\n"
+        except Exception:
+            content += "Directory listing unavailable\n"
+            
+        with open(readme_path, 'w') as f:
+            f.write(content)
+            
+    def get_render_filename(self, index: int) -> str:
+        """
+        Get standardized render filename
+        
+        Args:
+            index: View index
+        """
+        render_format = self.config.get('output', {}).get('render_format', '05d')
+        return f"{index:{render_format}}.png"
+
     def print_structure(self):
         """Print the output directory structure"""
         output_root = Path(self.config['paths']['output_root'])

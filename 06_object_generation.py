@@ -257,12 +257,6 @@ def save_outputs(mesh, image, output_dir, metadata):
         except Exception as e:
             console.print(f"[yellow]Could not generate preview: {e}[/yellow]")
     
-    # Save metadata
-    manifest_path = output_dir / "manifest.json"
-    console.print(f"Saving metadata to {manifest_path}")
-    with open(manifest_path, 'w') as f:
-        json.dump(metadata, f, indent=2)
-    
     console.print(f"\n[green]✓[/green] Object generation complete!")
     console.print(f"Output directory: {output_dir}")
     console.print(f"  - Mesh: mesh.obj, mesh.ply")
@@ -283,13 +277,12 @@ def main():
     # Load config
     config = ProjectConfig(args.config)
     
-    # Determine output directory
+    # Determine output directory using unified structure
     if args.output_dir:
         output_dir = Path(args.output_dir)
     else:
-        # Use same structure as other modules: outputs/{project.name}/06_object_gen/
-        project_name = config.get("project", "name") or "garden"
-        output_dir = Path(f"outputs/{project_name}/06_object_gen")
+        # Use unified structure: object_generation module
+        output_dir = config.get_path('object_generation')
     
     # Get input image
     if args.image:
@@ -335,21 +328,23 @@ def main():
         "module": "06_object_generation",
         "timestamp": datetime.now().isoformat(),
         "config_file": args.config,
-        "parameters": {
+        "inputs": {
             "prompt": args.prompt,
             "input_image": str(image_path) if args.image else None,
+        },
+        "parameters": {
             "resolution": args.resolution,
             "remove_background": args.remove_bg,
             "foreground_ratio": args.foreground_ratio,
             "device": args.device,
         },
         "outputs": {
-            "mesh": "mesh.obj",
-            "mesh_ply": "mesh.ply",
-            "input_image": "input_image.png",
-            "preview": "preview.png",
+            "mesh_obj": str(output_dir / "mesh.obj"),
+            "mesh_ply": str(output_dir / "mesh.ply"),
+            "input_image": str(output_dir / "input_image.png"),
+            "preview": str(output_dir / "preview.png"),
         },
-        "mesh_stats": {
+        "results": {
             "vertices": len(mesh.vertices),
             "faces": len(mesh.faces),
             "bounds": mesh.bounds.tolist(),
@@ -359,6 +354,9 @@ def main():
     
     # Save outputs
     save_outputs(mesh, image, output_dir, metadata)
+    
+    # Save manifest using unified system
+    config.save_manifest("06_object_generation", metadata)
 
 
 if __name__ == "__main__":

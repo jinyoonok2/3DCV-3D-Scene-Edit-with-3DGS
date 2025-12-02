@@ -27,17 +27,18 @@ paths:
   # Output root (all outputs go here)
   output_root: "outputs/${project.name}"   # Automatically uses project name
   
-  # Module-specific output directories (relative to output_root)
-  dataset_check: "00_dataset"
-  initial_training: "01_initial_gs"
-  renders: "02_renders"
-  masks: "03_masks"
-  roi: "04_roi"
-  inpainting: "05_inpainting"
-  object_generation: "06_object_gen"       # For replacement pipeline
-  scene_merge: "07_merge"                  # For replacement pipeline
-  evaluation: "08_evaluation"              # For final evaluation
-  logs: "logs"
+  # Unified module output directories (numbered for easy navigation)
+  dataset_check: "00_dataset_validation"
+  initial_training: "01_initial_training"
+  renders: "02_rendered_views" 
+  masks: "03_generated_masks"
+  roi: "04_roi_extraction"
+  inpainting: "05_scene_editing"
+  object_generation: "06_object_generation"    # For replacement pipeline
+  mesh_conversion: "07_mesh_to_gaussians"      # For replacement pipeline
+  scene_placement: "08_object_placement"       # For replacement pipeline  
+  final_optimization: "09_final_optimization"  # For replacement pipeline
+  logs: "00_pipeline_logs"                     # Central logging
 
 dataset:
   factor: 4                                # Downsampling factor (1, 2, 4, 8)
@@ -115,6 +116,22 @@ hardware:
   device: "cuda"                           # cuda or cpu
   num_workers: 4                           # DataLoader workers
   mixed_precision: true                    # Use fp16 for speed
+
+# Unified output structure settings
+output:
+  # File naming conventions
+  checkpoint_prefix: "ckpt_"               # ckpt_initial.pt, ckpt_holed.pt
+  render_format: "05d"                     # 00000.png, 00001.png, etc.
+  
+  # Create summary files in each module
+  create_summaries: true                   # Generate README.md in each output folder
+  save_manifests_local: true               # Save manifest.json in each module folder
+  
+  # Directory structure within modules
+  subdirs:
+    renders: ["train", "val", "test"]
+    masks: ["sam_masks", "projected_masks"]
+    models: ["checkpoints", "metrics"]
 
 # Logging
 logging:
