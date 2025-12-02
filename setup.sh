@@ -9,6 +9,12 @@
 
 set -e  # Exit on error
 
+# Function to ensure conda environment is active
+activate_conda_env() {
+    source "$(conda info --base)/etc/profile.d/conda.sh"
+    conda activate "$ENV_NAME"
+}
+
 ENV_NAME="3dgs"
 RESET=false
 
@@ -57,8 +63,7 @@ else
 fi
 
 # Activate environment
-source "$(conda info --base)/etc/profile.d/conda.sh"
-conda activate "$ENV_NAME"
+activate_conda_env
 echo ""
 
 #=============================================================================
@@ -128,8 +133,7 @@ echo ""
 #=============================================================================
 echo "Step 5: Installing gsplat from pip"
 # Ensure we're in the right conda environment
-source "$(conda info --base)/etc/profile.d/conda.sh"
-conda activate "$ENV_NAME"
+activate_conda_env
 if python -c "import gsplat" 2>/dev/null; then
     echo "✓ gsplat already installed: $(python -c 'import gsplat; print(gsplat.__version__)')"
 else
@@ -171,8 +175,7 @@ echo ""
 #=============================================================================
 echo "Step 7: Installing core project requirements"
 # Ensure we're in the right conda environment
-source "$(conda info --base)/etc/profile.d/conda.sh"
-conda activate "$ENV_NAME"
+activate_conda_env
 if [ -f "requirements.txt" ]; then
     pip install -r requirements.txt
     echo "✓ Core requirements installed"
@@ -184,8 +187,7 @@ echo ""
 #=============================================================================
 echo "Step 8: Installing TripoSR dependencies"
 # Ensure we're in the right conda environment
-source "$(conda info --base)/etc/profile.d/conda.sh"
-conda activate "$ENV_NAME"
+activate_conda_env
 if [ -f "requirements-triposr.txt" ]; then
     pip install -r requirements-triposr.txt
     echo "✓ TripoSR dependencies installed"
@@ -204,8 +206,7 @@ echo ""
 #=============================================================================
 echo "Step 9: Installing gsplat-src example dependencies"
 # Ensure we're in the right conda environment
-source "$(conda info --base)/etc/profile.d/conda.sh"
-conda activate "$ENV_NAME"
+activate_conda_env
 
 # Find CUDA toolkit for fused-ssim compilation
 CUDA_HOME=""
