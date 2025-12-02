@@ -136,10 +136,13 @@ echo "  Cloning fresh gsplat-src repository..."
 git clone https://github.com/nerfstudio-project/gsplat.git gsplat-src -q
 echo "✓ gsplat-src cloned (original version)"
 
-# Create symlink for datasets module access
-if [ ! -L "datasets" ]; then
-    ln -sf gsplat-src/examples/datasets datasets
-    echo "✓ datasets symlink created"
+# Ensure datasets directory exists (for MipNeRF-360 data)
+# Note: gsplat dataset parsers are accessed via gsplat-src/examples/datasets in code
+if [ ! -d "datasets" ]; then
+    mkdir -p datasets
+    echo "✓ datasets directory created"
+else
+    echo "✓ datasets directory exists"
 fi
 
 # GroundingDINO for config files
