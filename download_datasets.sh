@@ -51,8 +51,20 @@ if wget -q --show-progress "$DATASET_URL"; then
     echo ""
     echo "Extracting dataset..."
     if unzip -q "360_v2.zip"; then
+        # The zip extracts to current directory, but we need datasets/360_v2/ structure
+        # Move the extracted scenes into 360_v2 subfolder
+        mkdir -p 360_v2
+        
+        # Move only the scene directories (ignore .py and .txt files)
+        for scene in bicycle bonsai counter garden kitchen room stump; do
+            if [ -d "$scene" ]; then
+                mv "$scene" "360_v2/"
+                echo "  ✓ Moved $scene to 360_v2/"
+            fi
+        done
+        
         rm "360_v2.zip"
-        echo "✓ Extraction complete"
+        echo "✓ Extraction and restructuring complete"
     else
         echo "❌ Failed to extract 360_v2.zip"
         cd ..
