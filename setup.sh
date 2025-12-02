@@ -50,7 +50,7 @@ fi
 
 # Create/activate conda environment
 if ! conda info --envs | grep -q "^$ENV_NAME "; then
-    conda create -n "$ENV_NAME" python=3.10 -y -q
+    conda create -n "$ENV_NAME" python=3.12 -y -q
     echo "✓ Created new conda environment: $ENV_NAME"
 else
     echo "✓ Using existing conda environment: $ENV_NAME"
