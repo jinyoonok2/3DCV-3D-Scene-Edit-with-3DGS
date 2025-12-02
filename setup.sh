@@ -1,13 +1,13 @@
 #!/bin/bash
-# Setup script for 3DGS Scene Editing project
-# Requires CUDA 12.6+ (enforced)
-# Works on local machines, cloud GPU instances (Vast.ai, etc.)
+# Setup script for 3D Gaussian Splatting Scene Editing
+# Requires: CUDA-capable GPU, Python 3.10/3.12, CUDA toolkit matching PyTorch version
+# Tested on: Ubuntu 20.04+, Vast.ai GPU instances
 #
 # Usage:
 #   ./setup.sh          - Install dependencies (creates venv if needed)
 #   ./setup.sh --reset  - Remove existing venv and reinstall from scratch
 
-set -e  # Exit on any error
+set -e  # Exit on error
 
 VENV_DIR="venv"
 RESET=false
@@ -15,296 +15,288 @@ RESET=false
 # Parse arguments
 for arg in "$@"; do
     case $arg in
-        --reset|-r)
-            RESET=true
-            shift
-            ;;
-        *)
-            echo "Unknown argument: $arg"
-            echo "Usage: ./setup.sh [--reset]"
-            exit 1
-            ;;
+        --reset|-r) RESET=true; shift ;;
+        *) echo "Usage: ./setup.sh [--reset]"; exit 1 ;;
     esac
 done
 
 echo "=========================================="
-echo "3DGS Scene Editing - Environment Setup"
+echo "3DGS Scene Editing - Setup"
 echo "=========================================="
 echo ""
 
-# Handle reset flag
-if [ "$RESET" = true ]; then
-    if [ -d "$VENV_DIR" ]; then
-        echo "🔄 Resetting environment..."
-        echo "Removing existing virtual environment: $VENV_DIR"
-        rm -rf "$VENV_DIR"
-        echo "✓ Virtual environment removed"
-        echo ""
-    else
-        echo "⚠ No existing virtual environment found at $VENV_DIR"
-        echo ""
-    fi
-fi
+#=============================================================================
+# 1. Python Environment Setup
+#=============================================================================
+echo "Step 1: Setting up Python environment"
 
-# Check if virtual environment exists
-if [ -d "$VENV_DIR" ]; then
-    echo "✓ Virtual environment already exists at: $VENV_DIR"
-    echo "  (Use --reset flag to reinstall from scratch)"
-    echo ""
-    echo "Activating existing environment..."
-    source "$VENV_DIR/bin/activate"
+# Find suitable Python version (prefer 3.10, fallback to 3.12)
+PYTHON_CMD=""
+if command -v python3.10 &> /dev/null; then
+    PYTHON_CMD="python3.10"
+elif command -v python3.12 &> /dev/null; then
+    PYTHON_CMD="python3.12"
 else
-    echo "1. Creating virtual environment..."
-    python3 -m venv "$VENV_DIR"
-    echo "✓ Virtual environment created at: $VENV_DIR"
-    echo ""
-    
-    echo "2. Activating virtual environment..."
-    source "$VENV_DIR/bin/activate"
-    echo "✓ Virtual environment activated"
-    echo ""
-    
-    echo "3. Upgrading pip..."
-    pip install --upgrade pip setuptools wheel
-    echo "✓ pip upgraded"
-    echo ""
+    echo "✗ Error: Python 3.10 or 3.12 required"
+    echo "  Install: sudo apt install python3.10 python3.10-venv python3.10-dev"
+    exit 1
+fi
+echo "  Using: $PYTHON_CMD"
+
+# Handle reset
+if [ "$RESET" = true ] && [ -d "$VENV_DIR" ]; then
+    rm -rf "$VENV_DIR"
+    echo "  Removed existing venv"
 fi
 
-# Verify Python and system info
-echo "4. Verifying environment..."
-python --version
+# Create/activate venv
+if [ ! -d "$VENV_DIR" ]; then
+    $PYTHON_CMD -m venv "$VENV_DIR"
+    source "$VENV_DIR/bin/activate"
+    pip install --upgrade pip setuptools wheel -q
+    echo "✓ Created new virtual environment"
+else
+    source "$VENV_DIR/bin/activate"
+    echo "✓ Using existing virtual environment"
+fi
 echo ""
 
-# Install system dependencies for Pillow
-echo "5. Installing system dependencies..."
+#=============================================================================
+# 2. System Dependencies
+#=============================================================================
+echo "Step 2: Installing system dependencies"
 if [ "$EUID" -eq 0 ] || sudo -n true 2>/dev/null; then
-    echo "  Installing Pillow build dependencies..."
-    sudo apt-get update -qq && sudo apt-get install -y -qq \
-        libjpeg-dev zlib1g-dev libtiff-dev libfreetype6-dev \
-        liblcms2-dev libwebp-dev libharfbuzz-dev libfribidi-dev libxcb1-dev
-    echo "✓ System dependencies installed"
+    sudo apt-get update -qq
+    sudo apt-get install -y -qq libjpeg-dev zlib1g-dev libtiff-dev \
+        libfreetype6-dev liblcms2-dev libwebp-dev libharfbuzz-dev \
+        libfribidi-dev libxcb1-dev
+    echo "✓ System packages installed"
 else
     echo "⚠ Skipping system dependencies (no sudo access)"
-    echo "  If Pillow installation fails, run:"
-    echo "  sudo apt-get install -y libjpeg-dev zlib1g-dev libtiff-dev libfreetype6-dev liblcms2-dev libwebp-dev libharfbuzz-dev libfribidi-dev libxcb1-dev"
 fi
 echo ""
 
-# Check CUDA availability
+#=============================================================================
+# 3. GPU Verification
+#=============================================================================
+echo "Step 3: Verifying GPU"
 if command -v nvidia-smi &> /dev/null; then
-    echo "GPU Information:"
-    nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader
-    echo ""
-fi
-
-# Install PyTorch with CUDA 12.6
-echo "6. Installing PyTorch with CUDA 12.6..."
-if python -c "import torch" 2>/dev/null; then
-    echo "PyTorch already installed:"
-    python -c "import torch; print(f'  PyTorch: {torch.__version__}'); print(f'  CUDA available: {torch.cuda.is_available()}'); print(f'  CUDA version: {torch.version.cuda if torch.cuda.is_available() else \"N/A\"}'); print(f'  GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"N/A\"}')"
-    echo ""
+    nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader | head -1
+    echo "✓ GPU detected"
 else
-    echo "  Installing PyTorch with CUDA 12.6 support..."
-    echo "  This may take several minutes..."
+    echo "⚠ nvidia-smi not found - ensure NVIDIA drivers are installed"
+fi
+echo ""
+
+#=============================================================================
+# 4. PyTorch with CUDA 12.6
+#=============================================================================
+echo "Step 4: Installing PyTorch (CUDA 12.6)"
+if python -c "import torch" 2>/dev/null; then
+    TORCH_VER=$(python -c "import torch; print(torch.__version__)")
+    TORCH_CUDA=$(python -c "import torch; print(torch.version.cuda if torch.cuda.is_available() else 'none')")
+    if [[ "$TORCH_CUDA" == "12.6" ]]; then
+        echo "✓ PyTorch $TORCH_VER (CUDA $TORCH_CUDA) already installed"
+    else
+        echo "  Reinstalling PyTorch with CUDA 12.6..."
+        pip uninstall -y torch torchvision torchaudio
+        pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
+        echo "✓ PyTorch installed"
+    fi
+else
     pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
     echo "✓ PyTorch installed"
-    echo ""
 fi
 
-# Verify CUDA after PyTorch installation
-echo "7. Verifying CUDA availability..."
-python -c "import torch; assert torch.cuda.is_available(), 'CUDA not available!'; print(f'✓ CUDA is available'); print(f'  Device: {torch.cuda.get_device_name(0)}'); print(f'  CUDA Version: {torch.version.cuda}'); print(f'  Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB')"
+# Verify CUDA
+python -c "import torch; assert torch.cuda.is_available(), 'CUDA not available!'; print(f'  Device: {torch.cuda.get_device_name(0)}'); print(f'  CUDA: {torch.version.cuda}'); print(f'  Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB')"
 echo ""
 
-# Install gsplat from PyPI
-echo "8. Installing gsplat..."
+#=============================================================================
+# 5. gsplat
+#=============================================================================
+echo "Step 5: Installing gsplat"
 if python -c "import gsplat" 2>/dev/null; then
-    echo "✓ gsplat already installed:"
-    python -c "import gsplat; print(f'  Version: {gsplat.__version__}')"
+    echo "✓ gsplat already installed: $(python -c 'import gsplat; print(gsplat.__version__)')"
 else
-    echo "  Compiling CUDA kernels (this may take a few minutes)..."
-    # Install gsplat without fused-ssim to avoid build issues
     pip install gsplat --no-deps
-    # Then install gsplat dependencies manually (excluding fused-ssim)
-    pip install numpy jaxtyping typing_extensions
-    echo "✓ gsplat installed (fused-ssim skipped - optional dependency)"
+    pip install numpy jaxtyping typing_extensions ninja rich
+    echo "✓ gsplat installed"
 fi
 echo ""
 
-# Clone gsplat repository for examples (needed for requirements.txt)
-echo "9. Setting up gsplat examples repository..."
+#=============================================================================
+# 6. Clone Required Repositories
+#=============================================================================
+echo "Step 6: Cloning repositories"
+
+# gsplat-src for examples
 if [ ! -d "gsplat-src" ]; then
-    echo "  Cloning gsplat repository..."
-    git clone https://github.com/nerfstudio-project/gsplat.git gsplat-src
-    echo "✓ gsplat repository cloned"
+    git clone https://github.com/nerfstudio-project/gsplat.git gsplat-src -q
+    echo "✓ gsplat-src cloned"
 else
-    echo "✓ gsplat-src already exists"
+    echo "✓ gsplat-src exists"
+fi
+
+# GroundingDINO for config files
+if [ ! -d "GroundingDINO" ]; then
+    git clone https://github.com/IDEA-Research/GroundingDINO.git -q
+    echo "✓ GroundingDINO cloned"
+else
+    echo "✓ GroundingDINO exists"
+fi
+
+# TripoSR for 3D mesh generation
+if [ ! -d "TripoSR" ]; then
+    git clone https://github.com/VAST-AI-Research/TripoSR.git -q
+    cp -r TripoSR/tsr ./
+    touch tsr/__init__.py tsr/models/__init__.py
+    echo "✓ TripoSR cloned and configured"
+else
+    echo "✓ TripoSR exists"
+    [ ! -d "tsr" ] && cp -r TripoSR/tsr ./ && touch tsr/__init__.py tsr/models/__init__.py
 fi
 echo ""
 
-# Install project requirements
-echo "10. Installing project requirements..."
+#=============================================================================
+# 7. Project Requirements
+#=============================================================================
+echo "Step 7: Installing project requirements"
 if [ -f "requirements.txt" ]; then
     pip install -r requirements.txt
-    # Install gdown for downloading files from Google Drive
-    pip install gdown
-    echo "✓ Project requirements installed (including gdown)"
-else
-    echo "⚠ No requirements.txt found"
+    echo "✓ Project requirements installed"
 fi
 echo ""
 
-# Clone GroundingDINO repository for config files
-echo "11. Setting up GroundingDINO..."
-if [ ! -d "GroundingDINO" ]; then
-    git clone https://github.com/IDEA-Research/GroundingDINO.git
-    echo "✓ GroundingDINO repository cloned (for config files)"
-else
-    echo "✓ GroundingDINO repository already exists"
-fi
-echo ""
+#=============================================================================
+# 8. Additional Dependencies
+#=============================================================================
+echo "Step 8: Installing additional dependencies"
 
-# Install SAM2 from GitHub
-echo "12. Installing SAM2..."
-if python -c "import sam2" 2>/dev/null; then
-    echo "✓ SAM2 already installed"
-else
+# SAM2
+if ! python -c "import sam2" 2>/dev/null; then
     pip install git+https://github.com/facebookresearch/segment-anything-2.git
     echo "✓ SAM2 installed"
 fi
+
+# TripoSR dependencies
+pip install rembg==2.0.59 xatlas==0.0.9 trimesh onnxruntime einops omegaconf "pyglet<2" gdown
+pip install git+https://github.com/tatsy/torchmcubes.git
+echo "✓ Additional dependencies installed"
 echo ""
 
-# Clone TripoSR repository and install dependencies (Module 06)
-echo "13. Setting up TripoSR..."
-if [ ! -d "TripoSR" ]; then
-    echo "  Cloning TripoSR repository..."
-    git clone https://github.com/VAST-AI-Research/TripoSR.git
-    
-    # Copy tsr source to project root for imports
-    cp -r TripoSR/tsr ./
-    
-    # Create __init__.py files for Python module
-    touch tsr/__init__.py
-    touch tsr/models/__init__.py
-    
-    # Install TripoSR dependencies (combined for speed)
-    echo "  Installing TripoSR dependencies..."
-    pip install rembg==2.0.59 xatlas==0.0.9 trimesh onnxruntime einops omegaconf "pyglet<2"
-    pip install git+https://github.com/tatsy/torchmcubes.git
-    
-    echo "✓ TripoSR repository cloned and dependencies installed"
+#=============================================================================
+# 9. gsplat Examples Requirements (with CUDA extensions)
+#=============================================================================
+echo "Step 9: Installing gsplat examples requirements"
+
+# Find CUDA toolkit
+CUDA_HOME=""
+if command -v nvcc &> /dev/null; then
+    NVCC_PATH=$(which nvcc)
+    CUDA_HOME=$(dirname $(dirname "$NVCC_PATH"))
+    echo "  Found CUDA: $CUDA_HOME"
+elif [ -f "/usr/local/cuda/bin/nvcc" ]; then
+    CUDA_HOME="/usr/local/cuda"
+    echo "  Found CUDA: $CUDA_HOME"
+fi
+
+if [ -z "$CUDA_HOME" ] || [ ! -f "$CUDA_HOME/bin/nvcc" ]; then
+    echo "⚠ Warning: nvcc not found"
+    echo "  fused-ssim and fused-bilagrid require CUDA toolkit"
+    echo "  Install: conda install -c nvidia cuda-toolkit"
+    echo "  Skipping fused packages (optional performance optimizations)"
 else
-    echo "✓ TripoSR repository already exists"
-    if [ ! -d "tsr" ]; then
-        echo "  Copying tsr source..."
-        cp -r TripoSR/tsr ./
-        touch tsr/__init__.py
-        touch tsr/models/__init__.py
+    export CUDA_HOME
+    export PATH="$CUDA_HOME/bin:$PATH"
+    export LD_LIBRARY_PATH="$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+    export TORCH_CUDA_ARCH_LIST="8.9+PTX"
+    export FORCE_CUDA=1
+    
+    # Install gsplat examples requirements (excluding fused packages)
+    if [ -f "gsplat-src/examples/requirements.txt" ]; then
+        grep -v "fused-ssim" gsplat-src/examples/requirements.txt | \
+        grep -v "fused-bilagrid" | \
+        pip install -r /dev/stdin
     fi
-    # Create __init__.py if missing
-    if [ ! -f "tsr/__init__.py" ]; then
-        touch tsr/__init__.py
-        touch tsr/models/__init__.py
-    fi
-    # Verify imports
-    if ! python -c "from tsr.system import TSR" 2>/dev/null; then
-        echo "  Installing missing dependencies..."
-        pip install rembg==2.0.59 xatlas==0.0.9 trimesh onnxruntime einops omegaconf
-        pip install git+https://github.com/tatsy/torchmcubes.git
-    fi
+    
+    # Install fused packages with --no-build-isolation
+    echo "  Building fused-ssim..."
+    pip install --no-build-isolation \
+        git+https://github.com/rahul-goel/fused-ssim@328dc9836f513d00c4b5bc38fe30478b4435cbb5 || \
+        echo "  ⚠ fused-ssim failed (optional)"
+    
+    echo "  Building fused-bilagrid..."
+    pip install --no-build-isolation \
+        git+https://github.com/harry7557558/fused-bilagrid@90f9788e57d3545e3a033c1038bb9986549632fe || \
+        echo "  ⚠ fused-bilagrid failed (optional)"
+    
+    echo "✓ gsplat examples dependencies installed"
 fi
 echo ""
 
-# Download model weights
-echo "14. Downloading model weights..."
+#=============================================================================
+# 10. Download Model Weights
+#=============================================================================
+echo "Step 10: Downloading model weights"
 if [ ! -f "models/groundingdino_swint_ogc.pth" ] || [ ! -f "models/sam2_hiera_large.pt" ]; then
-    echo "  Running download_models.sh..."
     chmod +x download_models.sh
     ./download_models.sh
 else
     echo "✓ Model weights already downloaded"
-    echo "  GroundingDINO: models/groundingdino_swint_ogc.pth"
-    echo "  SAM2: models/sam2_hiera_large.pt"
 fi
 echo ""
 
-# Final verification
-echo "15. Final verification..."
-echo "  Testing imports..."
-python -c "
-import torch
-import gsplat
-import sam2
-import numpy as np
-import PIL
-print('✓ All core packages imported successfully')
-print(f'  PyTorch: {torch.__version__} (CUDA: {torch.cuda.is_available()})')
-print(f'  gsplat: {gsplat.__version__}')
-print('  SAM2: OK')
-"
-echo ""
-
-# Download dataset (required for all modules)
-echo "16. Downloading dataset..."
+#=============================================================================
+# 11. Download Dataset
+#=============================================================================
+echo "Step 11: Downloading dataset (MipNeRF360 garden)"
 if [ ! -d "datasets/360_v2/garden" ]; then
-    echo "  Downloading MipNeRF360 garden dataset (~2.5GB)..."
-    echo "  This may take several minutes depending on connection speed."
+    echo "  Downloading dataset (~2.5GB)..."
+    mkdir -p datasets/360_v2
     
-    # Try to download using gsplat's downloader
+    # Try gsplat downloader
     if [ -f "gsplat-src/examples/datasets/download_dataset.py" ]; then
         cd gsplat-src/examples
-        python datasets/download_dataset.py --dataset mipnerf360 2>/dev/null || echo "⚠ Download script not working, trying alternative..."
+        python datasets/download_dataset.py --dataset mipnerf360 2>/dev/null || true
         cd ../..
     fi
     
-    # Check if download succeeded and copy to project
+    # Copy if download succeeded
     if [ -d "gsplat-src/examples/data/360_v2/garden" ]; then
-        mkdir -p datasets/360_v2
-        cp -r gsplat-src/examples/data/360_v2/garden datasets/360_v2/garden
-        echo "✓ Dataset copied to datasets/360_v2/garden"
+        cp -r gsplat-src/examples/data/360_v2/garden datasets/360_v2/
+        echo "✓ Dataset downloaded"
     else
-        echo "⚠ Automatic download failed. Please download manually:"
+        echo "⚠ Auto-download failed. Manual download:"
         echo "  wget http://storage.googleapis.com/gresearch/refraw360/360_v2.zip"
         echo "  unzip 360_v2.zip -d datasets/"
-        echo "  Or use: gsutil -m cp -r gs://gresearch/refraw360/360_v2 datasets/"
     fi
 else
-    echo "✓ Dataset already exists at: datasets/360_v2/garden"
+    echo "✓ Dataset already exists"
 fi
 echo ""
 
+#=============================================================================
+# 12. Final Verification
+#=============================================================================
+echo "Step 12: Final verification"
+python -c "
+import torch, gsplat, sam2, numpy, PIL
+print(f'✓ PyTorch: {torch.__version__} (CUDA: {torch.cuda.is_available()})')
+print(f'✓ gsplat: {gsplat.__version__}')
+print('✓ SAM2, NumPy, Pillow: OK')
+"
+echo ""
+
 echo "=========================================="
-echo "Environment Setup Complete!"
+echo "Setup Complete!"
 echo "=========================================="
 echo ""
-echo "Virtual environment: $VENV_DIR"
-echo ""
-echo "✓ Public files downloaded:"
-echo "  - Dataset: datasets/360_v2/garden"
-echo "  - Models: models/groundingdino_swint_ogc.pth, models/sam2_hiera_large.pt"
-echo ""
-echo "⚠ You still need to upload YOUR trained files from local machine:"
-echo "  1. Checkpoint (trained Gaussian Splatting model):"
-echo "     outputs/garden/01_gs_base/ckpt_initial.pt (~500MB)"
-echo ""
-echo "  2. Masks (generated from Module 03):"
-echo "     outputs/garden/round_001/masks_brown_plant/sam_masks/ (~200MB)"
-echo ""
-echo "Upload using scp or rsync from your local machine:"
-echo "  scp -r outputs/garden root@<vastai-ip>:/workspace/3DCV-3D-Scene-Edit-with-3DGS/"
-echo ""
-echo "Then run Module 04a:"
+echo "Activate environment:"
 echo "  source activate.sh"
-echo "  python 04a_lift_masks_to_roi3d.py \\"
-echo "    --ckpt outputs/garden/01_gs_base/ckpt_initial.pt \\"
-echo "    --masks_root outputs/garden/round_001/masks_brown_plant/sam_masks \\"
-echo "    --data_root datasets/360_v2/garden \\"
-echo "    --roi_thresh 0.5 \\"
-echo "    --sh_degree 3 \\"
-echo "    --output_dir outputs/garden/round_001"
 echo ""
-echo "Download results back to local machine:"
-echo "  scp root@<vastai-ip>:/workspace/3DCV-3D-Scene-Edit-with-3DGS/outputs/garden/round_001/roi.pt outputs/garden/round_001/"
-echo ""
-echo "=========================================="
+echo "Next steps:"
+echo "  1. Upload trained checkpoint to: outputs/<project>/01_gs_base/ckpt_initial.pt"
+echo "  2. Upload masks to: outputs/<project>/round_001/masks_<object>/sam_masks/"
+echo "  3. Run pipeline: python 04a_lift_masks_to_roi3d.py --ckpt ... --masks_root ..."
 echo ""
