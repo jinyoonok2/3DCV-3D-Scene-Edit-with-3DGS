@@ -231,12 +231,32 @@ else
 fi
 echo ""
 
-
+#=============================================================================
+# 11. Download MipNeRF-360 Dataset (Optional)
+#=============================================================================
+echo "Step 11: MipNeRF-360 dataset download"
+if [ ! -d "datasets/360_v2" ] || [ -z "$(ls -A datasets/360_v2 2>/dev/null)" ]; then
+    echo "MipNeRF-360 dataset not found. Would you like to download it?"
+    echo "This will download all 7 scenes (~10 GB total)"
+    echo ""
+    read -p "Download MipNeRF-360 dataset? (y/N): " -n 1 -r
+    echo ""
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        chmod +x download_datasets.sh
+        ./download_datasets.sh
+    else
+        echo "Skipping dataset download. You can download later with:"
+        echo "  ./download_datasets.sh"
+    fi
+else
+    echo "✓ MipNeRF-360 dataset already exists"
+fi
+echo ""
 
 #=============================================================================
-# 11. Final Verification
+# 12. Final Verification
 #=============================================================================
-echo "Step 11: Final verification"
+echo "Step 12: Final verification"
 python -c "
 import torch, gsplat, sam2, numpy, PIL
 print(f'✓ PyTorch: {torch.__version__} (CUDA: {torch.cuda.is_available()})')
