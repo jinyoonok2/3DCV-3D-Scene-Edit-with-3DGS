@@ -187,6 +187,8 @@ def load_and_preprocess_image(image_path, remove_bg=True, foreground_ratio=0.85)
             alpha = image_np[:, :, 3:4]
             image_np = rgb * alpha + (1 - alpha)  # White background
         image = Image.fromarray((image_np * 255.0).astype(np.uint8))
+        
+        console.print(f"[cyan]Preprocessed image:[/cyan] {image.size}, mode={image.mode}")
     
     return image
 
@@ -215,6 +217,14 @@ def generate_mesh(
     console.print(f"Extracting mesh (resolution: {mc_resolution})...")
     meshes = model.extract_mesh(scene_codes, has_vertex_color=True, resolution=mc_resolution)
     mesh = meshes[0]
+    
+    # Log mesh statistics
+    console.print(f"\n[cyan]Mesh Statistics:[/cyan]")
+    console.print(f"  Vertices: {len(mesh.vertices)}")
+    console.print(f"  Faces: {len(mesh.faces)}")
+    console.print(f"  Bounds: {mesh.bounds}")
+    console.print(f"  Is watertight: {mesh.is_watertight}")
+    console.print(f"  Has vertex colors: {hasattr(mesh.visual, 'vertex_colors') and mesh.visual.vertex_colors is not None}")
     
     return mesh
 
