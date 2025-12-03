@@ -3,6 +3,17 @@
 # Matches gsplat-src/examples/requirements.txt exactly
 # assume torch is already installed
 
+# Common dependencies (shared with other phases)
+numpy<2.0.0,>=1.24.3
+Pillow>=9.5.0,<10.0.0
+imageio[ffmpeg]
+tqdm
+opencv-python
+pyyaml
+matplotlib
+rich
+lpips
+
 # pycolmap for data parsing
 git+https://github.com/rmbrualla/pycolmap@cc7ea4b7301720ac29287dbe450952511b32125e
 # (optional) nerfacc for torch version rasterization 
@@ -10,17 +21,10 @@ git+https://github.com/rmbrualla/pycolmap@cc7ea4b7301720ac29287dbe450952511b3212
 
 viser
 git+https://github.com/nerfstudio-project/nerfview@4538024fe0d15fd1a0e4d760f3695fc44ca72787
-imageio[ffmpeg]
-numpy<2.0.0
 scikit-learn
-tqdm
 torchmetrics[image]
-opencv-python
 tyro>=0.8.8
-Pillow>=9.5.0,<10.0.0
 tensorboard
 tensorly
-pyyaml
-matplotlib
 # git+https://github.com/rahul-goel/fused-ssim@328dc9836f513d00c4b5bc38fe30478b4435cbb5  # Install separately due to CUDA compilation issues
 splines

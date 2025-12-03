@@ -1,13 +1,6 @@
 # Core project dependencies (Phase 1 - Object Removal)
 # Used with requirements-gsplat.txt in setup.sh for steps 00-05c
 torch
-pyyaml
-numpy<2.0.0
-Pillow>=9.0.0
-tqdm
-opencv-python
-imageio
-rich
 
 # Diffusion models
 diffusers
@@ -17,12 +10,6 @@ accelerate
 # LaMa inpainting
 simple-lama-inpainting
 
-# Perception metrics
-lpips
-
 # Mask generation
 groundingdino-py
 # SAM2 installed via setup.sh
-
-# Visualization
-matplotlib

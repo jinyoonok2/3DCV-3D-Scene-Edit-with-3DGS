@@ -1,6 +1,7 @@
 # GaussianDreamer image-to-3D Gaussian generation dependencies (Phase 2)
 # This file is used independently in setup-generation.sh
 # Note: threestudio must be installed from GitHub (see setup-generation.sh)
+# Common dependencies (numpy, Pillow, imageio, lpips) already in Phase 1
 
 # Core 3D generation framework
 omegaconf
@@ -19,12 +20,6 @@ pyglet<2
 # Image downloading
 gdown
 
-# Version constraints (compatible with existing environment)
-numpy<2.0.0,>=1.24.3
-Pillow>=9.5.0,<10.0.0
-
 # Additional dependencies for GaussianDreamer
 pytorch-lightning
-imageio[ffmpeg]
 configargparse
-lpips
