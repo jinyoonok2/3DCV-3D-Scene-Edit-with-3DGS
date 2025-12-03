@@ -98,7 +98,7 @@ inpainting:
 
 # Replacement-specific config (for modules 06-08)
 replacement:
-  enabled: false                           # Set to true for replacement pipeline
+  enabled: true                            # Set to true for replacement pipeline
   
   # Module 06 - Object Generation
   object_generation:

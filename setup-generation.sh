@@ -83,6 +83,8 @@ echo "Step 3: Installing TripoSR dependencies"
 if [ -f "requirements-triposr.txt" ]; then
     echo "  Installing TripoSR dependencies in separate environment..."
     pip install -r requirements-triposr.txt
+    echo "  Installing torchmcubes (required for TripoSR)..."
+    pip install git+https://github.com/tatsy/torchmcubes.git
     echo "✓ TripoSR dependencies installed"
 else
     echo "❌ requirements-triposr.txt not found!"
