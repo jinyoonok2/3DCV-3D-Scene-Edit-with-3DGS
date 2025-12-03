@@ -49,6 +49,10 @@ fi
 if [ ! -d "$VENV_GENERATION" ]; then
     echo "  Copying Phase 1 environment to Phase 2..."
     cp -r "$VENV_REMOVAL" "$VENV_GENERATION"
+    
+    # Fix the prompt name in activate script
+    sed -i 's/venv-removal/venv-generation/g' "$VENV_GENERATION/bin/activate"
+    
     echo "✓ Created Phase 2 environment: $VENV_GENERATION"
 else
     echo "✓ Using existing Phase 2 environment: $VENV_GENERATION"
