@@ -83,6 +83,11 @@ echo "  Installing PyTorch 2.5.1 with CUDA 12.1..."
 pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu121 -q
 echo "✓ PyTorch installed"
 
+# Install numpy and Pillow from PyPI (not available in cu121 index)
+echo "  Installing core dependencies (numpy, Pillow)..."
+pip install "numpy<2.0.0,>=1.24.3" "Pillow>=9.5.0,<10.0.0" -q
+echo "✓ Core dependencies installed"
+
 # Install tiny-cuda-nn separately (requires torch for build)
 echo "  Installing tiny-cuda-nn (requires PyTorch for build)..."
 pip install --no-build-isolation ninja git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch -q
@@ -91,7 +96,7 @@ echo "✓ tiny-cuda-nn installed"
 # Install remaining dependencies from requirements file
 if [ -f "requirements-gaussiandreamer.txt" ]; then
     echo "  Installing remaining GaussianDreamer dependencies..."
-    pip install --no-build-isolation -r requirements-gaussiandreamer.txt --index-url https://download.pytorch.org/whl/cu121 -q
+    pip install --no-build-isolation -r requirements-gaussiandreamer.txt -q
     echo "✓ GaussianDreamer dependencies installed"
 else
     echo "❌ requirements-gaussiandreamer.txt not found!"

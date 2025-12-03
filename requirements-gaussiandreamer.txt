@@ -1,18 +1,17 @@
 # GaussianDreamer image-to-3D Gaussian generation dependencies (Phase 2)
 # This file is used independently in setup-generation.sh
-# Note: PyTorch installed first in setup script (required for tiny-cuda-nn build)
+# Note: PyTorch, numpy, Pillow installed separately in setup script
+# Note: tiny-cuda-nn installed separately (needs torch for build)
 # Note: threestudio installed separately with --no-deps for isolation
-# Note: numpy/Pillow re-enforced in setup script to resolve conflicts
-
-# Core dependencies
-numpy<2.0.0,>=1.24.3
-Pillow>=9.5.0,<10.0.0
 
 # Core 3D generation framework
 omegaconf
 einops
-xformers  # Will use cu121 index from setup script
-ninja
+xformers  # Will use PyPI since cu121 index removed
+
+# Background removal
+rembg[gpu]==2.0.59
+onnxruntime
 
 # tiny-cuda-nn (required by threestudio)
 git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch
