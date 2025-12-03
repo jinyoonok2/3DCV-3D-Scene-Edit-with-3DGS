@@ -588,6 +588,11 @@ def main():
     output_dir = args.output_dir if args.output_dir else str(config.get_path('masks'))
     dino_thresh = args.dino_thresh if args.dino_thresh is not None else config.config['segmentation']['dino_threshold']
     
+    # Selection parameters (CLI overrides config)
+    dino_selection = args.dino_selection if args.dino_selection is not None else config.get('segmentation', 'dino_selection')
+    sam_selection = args.sam_selection if args.sam_selection is not None else config.get('segmentation', 'sam_selection') 
+    sam_thresh = args.sam_thresh if args.sam_thresh is not None else config.get('segmentation', 'sam_thresh', default=0.5)
+    
     # Setup device
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
@@ -797,8 +802,8 @@ def main():
                 else:
                     print(f"WARNING: --select_index {idx} out of range for {img_name}")
             # Apply dino_selection if no manual override
-            elif args.dino_selection is not None and len(boxes) > 0:
-                if args.dino_selection == "confidence":
+            elif dino_selection is not None and len(boxes) > 0:
+                if dino_selection == "confidence":
                     # Pick box with highest DINO confidence
                     idx = np.argmax(logits)
                     selected_boxes = np.array([boxes[idx]])
@@ -806,7 +811,7 @@ def main():
                     selected_phrases = [phrases[idx]]
                     dino_selected_indices = [idx]
                     print(f"DINO selection: picked box {idx} with confidence {logits[idx]:.3f} for {img_name}")
-                elif args.dino_selection == "largest":
+                elif dino_selection == "largest":
                     # Pick largest box by area
                     box_areas = [(box[2] - box[0]) * (box[3] - box[1]) for box in boxes]
                     idx = np.argmax(box_areas)
@@ -832,8 +837,8 @@ def main():
             # Segment with SAM2 (use selected boxes, apply SAM threshold)
             masks_to_save, all_masks, sam_selected_indices, all_sam_scores = segment_with_sam2(
                 image_np, selected_boxes, sam_predictor, 
-                sam_selection=args.sam_selection,
-                sam_thresh=args.sam_thresh
+                sam_selection=sam_selection,
+                sam_thresh=sam_thresh
             )
             
             if len(masks_to_save) == 0:
@@ -953,8 +958,8 @@ def main():
             "reference_box": args.reference_box,
             "reference_box_normalized": ref_box_normalized,
             "reference_overlap_thresh": ref_overlap_thresh,
-            "dino_selection": args.dino_selection,
-            "sam_selection": args.sam_selection,
+            "dino_selection": dino_selection,
+            "sam_selection": sam_selection,
             "sam_thresh": args.sam_thresh,
         },
         "statistics": {
