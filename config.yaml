@@ -101,13 +101,13 @@ replacement:
   
   # Module 06 - Object Generation with GaussianDreamer
   object_generation:
-    image_url: "https://drive.google.com/file/d/1baF6f3D4FzseMOOcPVS3MJpLqIcklHMu/view?usp=drive_link"  # Input image URL (Google Drive or direct)
+    image_url: null                        # Input image URL (Google Drive or direct) - optional, can use text_prompt instead
     gaussiandreamer:
       num_points: 50000                    # Number of Gaussian splats to generate
       iterations: 5000                     # Training iterations for generation
       guidance_scale: 7.5                  # Classifier-free guidance scale
       sh_degree: 3                         # Spherical harmonics degree
-      text_prompt: null                    # Optional text prompt (e.g., "a potted plant")
+      text_prompt: "a simple white coffee mug with a handle"  # Text prompt for text-to-3D generation
   
   # Module 07 - Object Placement
   placement:
