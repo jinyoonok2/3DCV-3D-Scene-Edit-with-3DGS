@@ -327,20 +327,25 @@ def main():
     parser = Parser(data_root, factor=4, normalize=True, test_every=8)
     
     if args.views == "all":
-        dataset = Dataset(parser, split="train") + Dataset(parser, split="test")
+        full_dataset = Dataset(parser, split="train") + Dataset(parser, split="test")
     elif args.views == "val" or args.views == "test":
-        dataset = Dataset(parser, split="test")
+        full_dataset = Dataset(parser, split="test")
     elif args.views == "train":
-        dataset = Dataset(parser, split="train")
+        full_dataset = Dataset(parser, split="train")
     else:
         # Comma-separated indices
         indices = [int(x.strip()) for x in args.views.split(',')]
         full_dataset = Dataset(parser, split="train")
-        dataset = [full_dataset[i] for i in indices if i < len(full_dataset)]
     
-    # Limit number of views
-    if len(dataset) > args.num_views:
-        dataset = dataset[:args.num_views]
+    # Limit number of views and convert to list
+    num_views_to_use = min(len(full_dataset), args.num_views)
+    
+    # Handle comma-separated indices case
+    if args.views not in ["all", "val", "test", "train"]:
+        indices = [int(x.strip()) for x in args.views.split(',')]
+        dataset = [full_dataset[i] for i in indices if i < len(full_dataset)][:num_views_to_use]
+    else:
+        dataset = [full_dataset[i] for i in range(num_views_to_use)]
     
     console.print(f"✓ Dataset loaded: {len(dataset)} views\n")
     
