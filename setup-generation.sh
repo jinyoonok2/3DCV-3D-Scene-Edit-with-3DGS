@@ -54,7 +54,7 @@ else
     echo "✓ Using existing Phase 2 environment: $VENV_GENERATION"
 fi
 
-# Activate Phase 2 environment
+# Activate Phase 2 environment for installation
 source "$VENV_GENERATION/bin/activate"
 echo "✓ Activated Phase 2 environment"
 echo ""
@@ -133,3 +133,7 @@ echo "Or use the activate scripts:"
 echo "• source activate-removal.sh      # Phase 1 (object removal)"
 echo "• source activate-generation.sh   # Phase 2 (object generation)"
 echo ""
+
+# Deactivate environment after setup
+deactivate
+echo "✓ Environment deactivated after setup completion"
