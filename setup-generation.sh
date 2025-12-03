@@ -74,45 +74,29 @@ fi
 echo ""
 
 #=============================================================================
-# 3. GaussianDreamer Dependencies
+# 3. GaussianDreamer Dependencies  
 #=============================================================================
 echo "Step 3: Installing GaussianDreamer dependencies"
 
-# Pin critical packages to prevent version conflicts
-echo "  Pinning PyTorch and core dependencies to prevent conflicts..."
-pip install --no-deps "torch==2.5.1" "torchvision==0.20.1" "torchaudio==2.5.1" --index-url https://download.pytorch.org/whl/cu121 -q
-pip install "numpy<2.0.0,>=1.24.3" "Pillow>=9.5.0,<10.0.0" -q
-echo "✓ Core dependencies pinned"
-
-# Install xformers compatible with PyTorch 2.5.1
-echo "  Installing xformers for PyTorch 2.5.1..."
-pip install xformers --index-url https://download.pytorch.org/whl/cu121 -q
-echo "✓ xformers installed"
-
-# Install threestudio from GitHub (not available on PyPI)
-echo "  Installing threestudio from GitHub..."
-pip install --no-deps git+https://github.com/threestudio-project/threestudio.git -q
-echo "✓ threestudio installed"
-
-# Install remaining dependencies
+# Install from requirements file using PyTorch cu121 index for compatibility
 if [ -f "requirements-gaussiandreamer.txt" ]; then
-    echo "  Installing remaining GaussianDreamer dependencies..."
-    pip install -r requirements-gaussiandreamer.txt -q
+    echo "  Installing GaussianDreamer dependencies from requirements file..."
+    pip install -r requirements-gaussiandreamer.txt --index-url https://download.pytorch.org/whl/cu121 -q
     echo "✓ GaussianDreamer dependencies installed"
 else
     echo "❌ requirements-gaussiandreamer.txt not found!"
     exit 1
 fi
 
-# Re-pin numpy and Pillow after other packages may have upgraded them
-echo "  Re-pinning numpy and Pillow to ensure compatibility..."
-pip install --force-reinstall "numpy<2.0.0,>=1.24.3" "Pillow>=9.5.0,<10.0.0" -q
-echo "✓ Version constraints enforced"
+# Install threestudio separately with --no-deps to prevent version conflicts
+echo "  Installing threestudio (isolated to prevent conflicts)..."
+pip install --no-deps git+https://github.com/threestudio-project/threestudio.git -q
+echo "✓ threestudio installed"
 
-# Install tiny-cuda-nn (required by threestudio)
-echo "  Installing tiny-cuda-nn..."
-pip install ninja git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch -q
-echo "✓ tiny-cuda-nn installed"
+# Re-enforce version constraints that may have been upgraded by dependencies
+echo "  Re-enforcing version constraints..."
+pip install --force-reinstall "numpy<2.0.0,>=1.24.3" "Pillow>=9.5.0,<10.0.0" --no-deps -q
+echo "✓ Version constraints enforced"
 echo ""
 
 #=============================================================================
