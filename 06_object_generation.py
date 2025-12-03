@@ -47,7 +47,13 @@ console = Console()
 
 # Check for GaussianDreamer dependencies
 try:
+    # Try to import threestudio (optional - needed for full generation)
     import threestudio
+    THREESTUDIO_AVAILABLE = True
+except ImportError:
+    THREESTUDIO_AVAILABLE = False
+
+try:
     import omegaconf
     from omegaconf import OmegaConf
     import einops
@@ -269,9 +275,22 @@ def run_threestudio_generation(
     Run threestudio-based text-to-3D generation.
     Uses DreamGaussian for fast Gaussian generation.
     """
+    
+    # Check if threestudio is available
+    if not THREESTUDIO_AVAILABLE:
+        console.print("\n[yellow]threestudio not available (libigl dependency issue)[/yellow]")
+        console.print("[yellow]Using placeholder Gaussians for testing[/yellow]")
+        console.print("[dim]For real generation, run threestudio separately or use alternative methods[/dim]\n")
+        return create_placeholder_gaussians(
+            num_points=num_points,
+            sh_degree=sh_degree,
+            device=device
+        )
+    
     console.print("\n[cyan]Initializing threestudio for 3D generation...[/cyan]")
     
     # Import threestudio modules
+    import threestudio
     import threestudio
     from threestudio.utils.config import ExperimentConfig, load_config
     from threestudio.utils.typing import Optional
