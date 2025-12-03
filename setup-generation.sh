@@ -85,7 +85,7 @@ echo "✓ PyTorch installed"
 
 # Install tiny-cuda-nn separately (requires torch for build)
 echo "  Installing tiny-cuda-nn (requires PyTorch for build)..."
-pip install ninja git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch -q
+pip install --no-build-isolation ninja git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch -q
 echo "✓ tiny-cuda-nn installed"
 
 # Install remaining dependencies from requirements file
