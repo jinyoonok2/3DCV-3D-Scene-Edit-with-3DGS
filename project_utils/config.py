@@ -305,7 +305,7 @@ class ProjectConfig:
         except Exception:
             content += "Directory listing unavailable\n"
             
-        with open(readme_path, 'w') as f:
+        with open(readme_path, 'w', encoding='utf-8') as f:
             f.write(content)
             
     def get_render_filename(self, index: int) -> str:
