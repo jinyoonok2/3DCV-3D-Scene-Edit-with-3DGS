@@ -107,15 +107,29 @@ replacement:
       model: "stabilityai/TripoSR"
       foreground_ratio: 0.85
       mc_resolution: 256                   # Marching cubes resolution
-      
-  # Module 07 - Scene Merge
-  merge:
-    depth_model: "depth-anything/Depth-Anything-V2-Large-hf"
+  
+  # Module 07 - Mesh to Gaussians Conversion
+  mesh_conversion:
+    input_mesh: "outputs/${project.name}/06_object_generation/mesh.obj"  # Path to mesh from Module 06
+    num_points: 10000                      # Number of Gaussian splats to generate
+    sh_degree: 3                           # Spherical harmonics degree
+    initial_opacity: 0.1                   # Initial opacity value
+    scale_factor: 1.0                      # Scale adjustment for Gaussians
+    output_gaussians: "outputs/${project.name}/07_mesh_conversion/gaussians.pt"
+  
+  # Module 08 - Object Placement
+  placement:
+    object_gaussians: "outputs/${project.name}/07_mesh_conversion/gaussians.pt"  # Object Gaussians from Module 07
+    roi_file: "outputs/${project.name}/04_roi_extraction/roi.pt"  # ROI from Module 04a
+    scene_gaussians: "outputs/${project.name}/05_scene_editing/05c_optimized/ckpt_patched.pt"  # Scene after removal from Module 05c
     alignment_method: "depth"              # depth, manual, or auto
     scale_factor: 1.0                      # Object scale adjustment
-    
-  # Module 08 - Evaluation
-  evaluation:
+    output_merged: "outputs/${project.name}/08_object_placement/merged_gaussians.pt"
+      
+  # Module 09 - Visualization & Evaluation
+  visualization:
+    merged_checkpoint: "outputs/${project.name}/08_object_placement/merged_gaussians.pt"  # Merged scene from Module 08
+    original_checkpoint: "outputs/${project.name}/01_initial_training/ckpt_initial.pt"  # Original scene from Module 01
     metrics: ["clip", "lpips", "ssim", "psnr"]
     clip_model: "ViT-B/32"
     num_eval_views: 20                     # Number of views to evaluate

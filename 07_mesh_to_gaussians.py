@@ -53,8 +53,7 @@ def parse_args():
     parser.add_argument(
         "--mesh",
         type=str,
-        required=True,
-        help="Path to input mesh (.ply or .obj)",
+        help="Path to input mesh (.ply or .obj). If not provided, uses mesh from Module 06 output.",
     )
     parser.add_argument(
         "--num_points",
@@ -241,10 +240,35 @@ def main():
     console.print("Module 07: Mesh to Gaussians Conversion")
     console.print("="*80 + "\n")
     
+    # Load config first
+    config = ProjectConfig(args.config)
+    
+    # Determine mesh path
+    if args.mesh:
+        mesh_path = args.mesh
+    else:
+        # Use config value
+        mesh_config = config.config.get('replacement', {}).get('mesh_conversion', {}).get('input_mesh')
+        if mesh_config:
+            # Expand project name variable
+            project_name = config.get("project", "name")
+            mesh_path = Path(str(mesh_config).replace('${project.name}', project_name))
+            console.print(f"[cyan]Using mesh from config:[/cyan] {mesh_path}")
+        else:
+            console.print("[red]Error: No mesh path found![/red]")
+            console.print("Please provide one of:")
+            console.print("1. CLI argument: --mesh path/to/mesh.obj")
+            console.print("2. Config setting: replacement.mesh_conversion.input_mesh")
+            sys.exit(1)
+    
+    if not Path(mesh_path).exists():
+        console.print(f"[red]Error: Mesh file not found: {mesh_path}[/red]")
+        sys.exit(1)
+    
     # Load mesh
-    console.print(f"Loading mesh: {args.mesh}")
+    console.print(f"Loading mesh: {mesh_path}")
     try:
-        mesh = trimesh.load(args.mesh)
+        mesh = trimesh.load(mesh_path)
         console.print(f"✓ Mesh loaded:")
         console.print(f"  Vertices: {len(mesh.vertices)}")
         console.print(f"  Faces: {len(mesh.faces)}")
@@ -252,6 +276,21 @@ def main():
     except Exception as e:
         console.print(f"[red]Error loading mesh: {e}[/red]")
         sys.exit(1)
+    
+    # Get parameters from config if not provided via CLI
+    mesh_conv_config = config.config.get('replacement', {}).get('mesh_conversion', {})
+    
+    # Use config values as defaults if CLI args not provided
+    num_points = args.num_points if args.num_points != 10000 else mesh_conv_config.get('num_points', 10000)
+    sh_degree = args.sh_degree if args.sh_degree != 3 else mesh_conv_config.get('sh_degree', 3)
+    initial_opacity = args.initial_opacity if args.initial_opacity != 0.1 else mesh_conv_config.get('initial_opacity', 0.1)
+    scale_factor = args.scale_factor if args.scale_factor != 0.01 else mesh_conv_config.get('scale_factor', 0.01)
+    
+    # Update args with config values
+    args.num_points = num_points
+    args.sh_degree = sh_degree
+    args.initial_opacity = initial_opacity
+    args.scale_factor = scale_factor
     
     # Sample mesh surface
     points, normals, colors = sample_mesh_surface(mesh, args.num_points)
@@ -263,10 +302,13 @@ def main():
     if args.output:
         output_path = Path(args.output)
     else:
-        # Default: save in 06_object_gen directory
-        config = ProjectConfig(args.config)
-        project_name = config.get("project", "name") or "garden"
-        output_path = Path(f"outputs/{project_name}/06_object_gen/gaussians.pt")
+        # Use config value
+        output_config = mesh_conv_config.get('output_gaussians')
+        if output_config:
+            project_name = config.get("project", "name")
+            output_path = Path(str(output_config).replace('${project.name}', project_name))
+        else:
+            output_path = config.get_path('mesh_conversion') / "gaussians.pt"
     
     # Prepare metadata
     metadata = {
@@ -274,7 +316,7 @@ def main():
         "timestamp": datetime.now().isoformat(),
         "config_file": args.config,
         "parameters": {
-            "mesh_file": str(args.mesh),
+            "mesh_file": str(mesh_path),
             "num_points": args.num_points,
             "sh_degree": args.sh_degree,
             "initial_opacity": args.initial_opacity,
