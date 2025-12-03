@@ -91,7 +91,7 @@ echo "✓ tiny-cuda-nn installed"
 # Install remaining dependencies from requirements file
 if [ -f "requirements-gaussiandreamer.txt" ]; then
     echo "  Installing remaining GaussianDreamer dependencies..."
-    pip install -r requirements-gaussiandreamer.txt --index-url https://download.pytorch.org/whl/cu121 -q
+    pip install --no-build-isolation -r requirements-gaussiandreamer.txt --index-url https://download.pytorch.org/whl/cu121 -q
     echo "✓ GaussianDreamer dependencies installed"
 else
     echo "❌ requirements-gaussiandreamer.txt not found!"
