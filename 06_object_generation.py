@@ -330,8 +330,8 @@ def main():
         "timestamp": datetime.now().isoformat(),
         "config_file": args.config,
         "inputs": {
-            "prompt": args.prompt,
-            "input_image": str(image_path) if args.image else None,
+            "input_image": str(image_path),
+            "image_source": args.image if args.image else config.config.get('replacement', {}).get('object_generation', {}).get('image_url'),
         },
         "parameters": {
             "resolution": args.resolution,
