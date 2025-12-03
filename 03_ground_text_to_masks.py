@@ -755,7 +755,9 @@ def main():
                     phrases = [phrases[i] for i in filtered_indices]
                     print(f"Filtered {len(filtered_indices)}/{len(original_boxes)} boxes by reference_box overlap for {img_name}")
                 else:
-                    print(f"WARNING: No boxes pass reference_box overlap threshold for {img_name}")
+                    print(f"WARNING: No boxes pass reference_box overlap threshold for {img_name} - skipping image")
+                    # Skip this image entirely - no processing, no mask generation
+                    continue
             
             # Apply DINO selection or manual boxes
             selected_boxes = boxes

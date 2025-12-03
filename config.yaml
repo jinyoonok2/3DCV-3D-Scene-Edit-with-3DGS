@@ -67,7 +67,7 @@ segmentation:
   # Spatial filtering (optional)
   reference_box: [0.36, 0.2, 0.64, 0.62]  # [x1,y1,x2,y2] reference box for spatial filtering
   reference_box_normalized: true           # If true, coordinates are [0-1], else pixels
-  reference_overlap_thresh: 0.8            # Minimum overlap with reference box (0.0-1.0)
+  reference_overlap_thresh: 0.5            # Minimum overlap with reference box (0.0-1.0)
   
 roi:
   threshold: 0.01                          # ROI weight threshold for deletion (lower = more permissive)
