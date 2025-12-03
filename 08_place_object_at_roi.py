@@ -154,6 +154,10 @@ def transform_object_to_roi(object_gaussians, roi_mask, scene_positions, args):
     console.print(f"  Center: {obj_center.numpy()}")
     console.print(f"  Size: {obj_size.numpy()}")
     
+    # Convert ROI mask to boolean if needed
+    if roi_mask.dtype not in [torch.bool, torch.uint8]:
+        roi_mask = roi_mask.bool()
+    
     # Get ROI bounds from scene positions with ROI mask
     roi_positions = scene_positions[roi_mask]  # Positions of ROI Gaussians
     roi_min, roi_max, roi_center, roi_size = get_bounds(roi_positions)
