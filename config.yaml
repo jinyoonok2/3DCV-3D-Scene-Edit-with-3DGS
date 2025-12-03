@@ -111,7 +111,7 @@ replacement:
   # Module 07 - Mesh to Gaussians Conversion
   mesh_conversion:
     input_mesh: "outputs/${project.name}/06_object_generation/mesh.obj"  # Path to mesh from Module 06
-    num_points: 200000                     # Number of Gaussian splats to generate (balanced detail vs memory)
+    num_points: 50000                      # Number of Gaussian splats to generate (conservative for 24GB GPU)
     sh_degree: 3                           # Spherical harmonics degree
     initial_opacity: 0.8                   # Initial opacity value (increased for visibility)
     scale_factor: 1.0                      # Scale adjustment for Gaussians
