@@ -60,34 +60,29 @@ echo "✓ Activated Phase 2 environment"
 echo ""
 
 #=============================================================================
-# 2. TripoSR Repository Setup
+# 2. GaussianDreamer Repository Setup
 #=============================================================================
-echo "Step 2: Setting up TripoSR repository"
+echo "Step 2: Setting up GaussianDreamer repository"
 
-# TripoSR for 3D mesh generation
-if [ ! -d "TripoSR" ]; then
-    git clone https://github.com/VAST-AI-Research/TripoSR.git -q
-    cp -r TripoSR/tsr ./
-    touch tsr/__init__.py tsr/models/__init__.py
-    echo "✓ TripoSR cloned and configured"
+# GaussianDreamer for direct image-to-3D Gaussian generation
+if [ ! -d "GaussianDreamer" ]; then
+    git clone https://github.com/hustvl/GaussianDreamer.git -q
+    echo "✓ GaussianDreamer cloned"
 else
-    echo "✓ TripoSR exists"
-    [ ! -d "tsr" ] && cp -r TripoSR/tsr ./ && touch tsr/__init__.py tsr/models/__init__.py
+    echo "✓ GaussianDreamer exists"
 fi
 echo ""
 
 #=============================================================================
-# 3. TripoSR Dependencies
+# 3. GaussianDreamer Dependencies
 #=============================================================================
-echo "Step 3: Installing TripoSR dependencies"
-if [ -f "requirements-triposr.txt" ]; then
-    echo "  Installing TripoSR dependencies in separate environment..."
-    pip install -r requirements-triposr.txt
-    echo "  Installing torchmcubes (required for TripoSR)..."
-    pip install git+https://github.com/tatsy/torchmcubes.git
-    echo "✓ TripoSR dependencies installed"
+echo "Step 3: Installing GaussianDreamer dependencies"
+if [ -f "requirements-gaussiandreamer.txt" ]; then
+    echo "  Installing GaussianDreamer dependencies in separate environment..."
+    pip install -r requirements-gaussiandreamer.txt
+    echo "✓ GaussianDreamer dependencies installed"
 else
-    echo "❌ requirements-triposr.txt not found!"
+    echo "❌ requirements-gaussiandreamer.txt not found!"
     exit 1
 fi
 echo ""
@@ -103,13 +98,15 @@ print(f'✓ PyTorch: {torch.__version__} (CUDA: {torch.cuda.is_available()})')
 print(f'✓ gsplat: {gsplat.__version__}')
 print('✓ SAM2, NumPy, Pillow: OK')
 
-# Check TripoSR
+# Check GaussianDreamer dependencies
 try:
-    from tsr.system import TSR
-    from tsr.utils import remove_background, resize_foreground
-    print('✓ TripoSR: Available')
+    import threestudio
+    import omegaconf
+    import einops
+    import rembg
+    print('✓ GaussianDreamer dependencies: Available')
 except ImportError as e:
-    print(f'❌ TripoSR import failed: {e}')
+    print(f'❌ GaussianDreamer dependency import failed: {e}')
     exit(1)
 "
 echo ""

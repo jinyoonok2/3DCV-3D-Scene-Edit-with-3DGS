@@ -53,8 +53,8 @@ source activate-generation.sh
 # Run generation steps (placeholder commands)
 python 06_generate_objects_from_text.py
 python 07_convert_mesh_to_gaussians.py
-python 08_place_object_at_roi.py
-python 09_final_visualization.py
+python 07_place_object_at_roi.py
+python 08_final_visualization.py
 ```
 
 ---
@@ -680,8 +680,8 @@ python 04a_lift_masks_to_roi3d.py --roi_thresh 0.01 # For maximum inclusiveness
 ├── Phase 2: Object Generation Pipeline (Future)
 │   ├── 06_generate_objects_from_text.py  # Text → 3D mesh
 │   ├── 07_convert_mesh_to_gaussians.py  # Mesh → Gaussians
-│   ├── 08_place_object_at_roi.py        # Place at ROI
-│   └── 09_final_visualization.py        # Final render
+│   ├── 07_place_object_at_roi.py        # Place at ROI
+│   └── 08_final_visualization.py        # Final render
 │
 ├── Setup & Environment
 │   ├── setup-removal.sh             # Phase 1 environment setup

@@ -35,9 +35,8 @@ paths:
   roi: "04_roi_extraction"
   inpainting: "05_scene_editing"
   object_generation: "06_object_generation"    # For replacement pipeline
-  mesh_conversion: "07_mesh_to_gaussians"      # For replacement pipeline
-  scene_placement: "08_object_placement"       # For replacement pipeline  
-  final_optimization: "09_final_optimization"  # For replacement pipeline
+  scene_placement: "07_object_placement"       # For replacement pipeline  
+  final_optimization: "08_final_optimization"  # For replacement pipeline
   logs: "00_pipeline_logs"                     # Central logging
 
 dataset:
@@ -96,39 +95,32 @@ inpainting:
       sh0: 0.0025                          # SH DC component learning rate
       shN: 0.0025                          # SH rest component learning rate
 
-# Replacement-specific config (for modules 06-08)
+# Replacement-specific config (for modules 06-09)
 replacement:
   enabled: true                            # Set to true for replacement pipeline
   
-  # Module 06 - Object Generation
+  # Module 06 - Object Generation with GaussianDreamer
   object_generation:
     image_url: "https://drive.google.com/file/d/1baF6f3D4FzseMOOcPVS3MJpLqIcklHMu/view?usp=drive_link"  # Input image URL (Google Drive or direct)
-    triposr:
-      model: "stabilityai/TripoSR"
-      foreground_ratio: 0.85
-      mc_resolution: 256                   # Marching cubes resolution
+    gaussiandreamer:
+      num_points: 50000                    # Number of Gaussian splats to generate
+      iterations: 5000                     # Training iterations for generation
+      guidance_scale: 7.5                  # Classifier-free guidance scale
+      sh_degree: 3                         # Spherical harmonics degree
+      text_prompt: null                    # Optional text prompt (e.g., "a potted plant")
   
-  # Module 07 - Mesh to Gaussians Conversion
-  mesh_conversion:
-    input_mesh: "outputs/${project.name}/06_object_generation/mesh.obj"  # Path to mesh from Module 06
-    num_points: 50000                      # Number of Gaussian splats to generate (conservative for 24GB GPU)
-    sh_degree: 3                           # Spherical harmonics degree
-    initial_opacity: 0.8                   # Initial opacity value (increased for visibility)
-    scale_factor: 1.0                      # Scale adjustment for Gaussians
-    output_gaussians: "outputs/${project.name}/07_mesh_conversion/gaussians.pt"
-  
-  # Module 08 - Object Placement
+  # Module 07 - Object Placement
   placement:
-    object_gaussians: "outputs/${project.name}/07_mesh_conversion/gaussians.pt"  # Object Gaussians from Module 07
+    object_gaussians: "outputs/${project.name}/06_object_generation/gaussians.pt"  # Object Gaussians from Module 06 (GaussianDreamer)
     roi_file: "outputs/${project.name}/04_roi_extraction/roi.pt"  # ROI from Module 04a
     scene_gaussians: "outputs/${project.name}/05_scene_editing/05c_optimized/ckpt_patched.pt"  # Scene after removal from Module 05c
     alignment_method: "depth"              # depth, manual, or auto
     scale_factor: 1.0                      # Object scale adjustment
-    output_merged: "outputs/${project.name}/08_object_placement/merged_gaussians.pt"
+    output_merged: "outputs/${project.name}/07_object_placement/merged_gaussians.pt"
       
-  # Module 09 - Visualization & Evaluation
+  # Module 08 - Visualization & Evaluation
   visualization:
-    merged_checkpoint: "outputs/${project.name}/08_object_placement/merged_gaussians.pt"  # Merged scene from Module 08
+    merged_checkpoint: "outputs/${project.name}/07_object_placement/merged_gaussians.pt"  # Merged scene from Module 07
     original_checkpoint: "outputs/${project.name}/01_initial_training/ckpt_initial.pt"  # Original scene from Module 01
     metrics: ["clip", "lpips", "ssim", "psnr"]
     clip_model: "ViT-B/32"

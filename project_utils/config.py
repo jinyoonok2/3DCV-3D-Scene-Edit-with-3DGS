@@ -64,7 +64,6 @@ class ProjectConfig:
         if self.config.get('replacement', {}).get('enabled', False):
             dirs_to_create.extend([
                 self.get_path('object_generation'),
-                self.get_path('mesh_conversion'),
                 self.get_path('scene_placement'),
                 self.get_path('final_optimization'),
             ])
@@ -240,9 +239,8 @@ class ProjectConfig:
             '05b_inpaint_holes': 'inpainting',
             '05c_optimize_to_targets': 'inpainting',
             '06_object_generation': 'object_generation',
-            '07_mesh_to_gaussians': 'mesh_conversion',
-            '08_place_object_at_roi': 'scene_placement',
-            '09_final_optimization': 'final_optimization',
+            '07_place_object_at_roi': 'scene_placement',
+            '08_final_optimization': 'final_optimization',
         }
         
         path_key = module_mapping.get(module_name)

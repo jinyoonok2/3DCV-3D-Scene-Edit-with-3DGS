@@ -1,0 +1,30 @@
+# GaussianDreamer image-to-3D Gaussian generation dependencies (Phase 2)
+# This file is used independently in setup-generation.sh
+
+# Core 3D generation framework
+threestudio
+omegaconf
+einops
+xformers
+ninja
+
+# Background removal
+rembg[gpu]==2.0.59
+onnxruntime
+
+# 3D processing
+trimesh
+pyglet<2
+
+# Image downloading
+gdown
+
+# Version constraints (compatible with existing environment)
+numpy<2.0.0,>=1.24.3
+Pillow>=9.5.0,<10.0.0
+
+# Additional dependencies for GaussianDreamer
+pytorch-lightning
+imageio[ffmpeg]
+configargparse
+lpips

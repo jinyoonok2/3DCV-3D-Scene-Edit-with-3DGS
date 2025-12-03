@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-09_final_visualization.py - Final Scene Visualization and Evaluation
+08_final_visualization.py - Final Scene Visualization and Evaluation
 
-This module renders and evaluates the final merged scene from Module 08.
+This module renders and evaluates the final merged scene from Module 07.
 It creates comprehensive visualizations showing:
 - Rendered views of the final scene
 - Before/after comparisons 
@@ -11,11 +11,11 @@ It creates comprehensive visualizations showing:
 - Summary grid images
 
 Inputs:
-  --merged_ckpt: Path to merged scene checkpoint (from Module 08)
+  --merged_ckpt: Path to merged scene checkpoint (from Module 07)
   --original_ckpt: Path to original scene checkpoint (Module 01)
   --data_root: Dataset directory
 
-Outputs (saved in 09_final_visualization/):
+Outputs (saved in 08_final_visualization/):
   - renders/: Final scene renders from all viewpoints
   - comparisons/: Before/after comparison grids
   - metrics.json: Quantitative evaluation results
@@ -73,7 +73,7 @@ def parse_args():
     parser.add_argument(
         "--merged_ckpt",
         type=str,
-        help="Path to merged scene checkpoint (from Module 08, auto-detected if not provided)",
+        help="Path to merged scene checkpoint (from Module 07, auto-detected if not provided)",
     )
     parser.add_argument(
         "--original_ckpt",
@@ -262,7 +262,7 @@ def main():
     args = parse_args()
     
     console.print("\n" + "="*80)
-    console.print("Module 09: Final Scene Visualization & Evaluation") 
+    console.print("Module 08: Final Scene Visualization & Evaluation") 
     console.print("="*80 + "\n")
     
     # Load config
@@ -284,7 +284,7 @@ def main():
             merged_ckpt = config.get_path('scene_placement') / 'merged_gaussians.pt'
         if not merged_ckpt.exists():
             console.print(f"[red]Merged checkpoint not found: {merged_ckpt}[/red]")
-            console.print("Run Module 08 first or provide --merged_ckpt")
+            console.print("Run Module 07 first or provide --merged_ckpt")
             sys.exit(1)
     
     if args.original_ckpt:
@@ -423,7 +423,7 @@ def main():
     
     # Create manifest
     manifest = {
-        "module": "09_final_visualization",
+        "module": "08_final_visualization",
         "timestamp": datetime.now().isoformat(),
         "config_file": args.config,
         "inputs": {
@@ -453,9 +453,9 @@ def main():
     }
     
     # Save manifest using unified system
-    config.save_manifest("09_final_visualization", manifest)
+    config.save_manifest("08_final_visualization", manifest)
     
-    console.print(f"\n[green]✓ Module 09 complete![/green]")
+    console.print(f"\n[green]✓ Module 08 complete![/green]")
     console.print(f"📁 Output directory: {output_dir}")
     console.print(f"🖼️  Renders: {len(rendered_paths)} images")
     if comparison_paths:
