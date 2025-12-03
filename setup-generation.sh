@@ -103,6 +103,16 @@ else
     echo "❌ requirements-gaussiandreamer.txt not found!"
     exit 1
 fi
+
+# Re-pin numpy and Pillow after other packages may have upgraded them
+echo "  Re-pinning numpy and Pillow to ensure compatibility..."
+pip install --force-reinstall "numpy<2.0.0,>=1.24.3" "Pillow>=9.5.0,<10.0.0" -q
+echo "✓ Version constraints enforced"
+
+# Install tiny-cuda-nn (required by threestudio)
+echo "  Installing tiny-cuda-nn..."
+pip install ninja git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch -q
+echo "✓ tiny-cuda-nn installed"
 echo ""
 
 #=============================================================================
