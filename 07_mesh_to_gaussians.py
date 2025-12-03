@@ -261,14 +261,15 @@ def render_preview(gaussians, output_dir):
         for i, angle in enumerate(angles):
             # Camera position (orbit around object)
             angle_rad = np.deg2rad(angle)
-            cam_pos = center.cpu().numpy() + np.array([
+            center_np = center.cpu().numpy()
+            cam_pos = center_np + np.array([
                 np.cos(angle_rad) * distance,
                 0,
                 np.sin(angle_rad) * distance
             ])
             
             # Look-at matrix
-            forward = center.numpy() - cam_pos
+            forward = center_np - cam_pos
             forward = forward / np.linalg.norm(forward)
             right = np.cross(np.array([0, 1, 0]), forward)
             right = right / np.linalg.norm(right)
