@@ -1,8 +1,8 @@
 # GaussianDreamer image-to-3D Gaussian generation dependencies (Phase 2)
 # This file is used independently in setup-generation.sh
+# Note: threestudio must be installed from GitHub (see setup-generation.sh)
 
 # Core 3D generation framework
-threestudio
 omegaconf
 einops
 xformers

@@ -77,9 +77,16 @@ echo ""
 # 3. GaussianDreamer Dependencies
 #=============================================================================
 echo "Step 3: Installing GaussianDreamer dependencies"
+
+# Install threestudio from GitHub first (not available on PyPI)
+echo "  Installing threestudio from GitHub..."
+pip install git+https://github.com/threestudio-project/threestudio.git -q
+echo "✓ threestudio installed"
+
+# Install remaining dependencies
 if [ -f "requirements-gaussiandreamer.txt" ]; then
-    echo "  Installing GaussianDreamer dependencies in separate environment..."
-    pip install -r requirements-gaussiandreamer.txt
+    echo "  Installing remaining GaussianDreamer dependencies..."
+    pip install -r requirements-gaussiandreamer.txt -q
     echo "✓ GaussianDreamer dependencies installed"
 else
     echo "❌ requirements-gaussiandreamer.txt not found!"
