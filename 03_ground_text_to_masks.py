@@ -665,16 +665,16 @@ def main():
         except Exception as e:
             print(f"WARNING: Failed to parse reference_box: {e}")
             ref_box_template = None
-    elif config.segmentation.get('reference_box') is not None:
+    elif config.get('segmentation', 'reference_box') is not None:
         # Use config reference box
         try:
-            ref_box_template = config.segmentation.reference_box
+            ref_box_template = config.get('segmentation', 'reference_box')
             if len(ref_box_template) != 4:
                 print(f"WARNING: config reference_box must have 4 values, got {len(ref_box_template)}")
                 ref_box_template = None
             else:
-                ref_box_normalized = config.segmentation.get('reference_box_normalized', False)
-                ref_overlap_thresh = config.segmentation.get('reference_overlap_thresh', 0.8)
+                ref_box_normalized = config.get('segmentation', 'reference_box_normalized', default=False)
+                ref_overlap_thresh = config.get('segmentation', 'reference_overlap_thresh', default=0.8)
                 print(f"Using config reference box: {ref_box_template} ({'normalized' if ref_box_normalized else 'pixels'})")
         except Exception as e:
             print(f"WARNING: Failed to parse config reference_box: {e}")
