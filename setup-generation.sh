@@ -78,9 +78,19 @@ echo ""
 #=============================================================================
 echo "Step 3: Installing GaussianDreamer dependencies"
 
-# Install from requirements file using PyTorch cu121 index for compatibility
+# Install PyTorch first (required by tiny-cuda-nn build)
+echo "  Installing PyTorch 2.5.1 with CUDA 12.1..."
+pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu121 -q
+echo "✓ PyTorch installed"
+
+# Install tiny-cuda-nn separately (requires torch for build)
+echo "  Installing tiny-cuda-nn (requires PyTorch for build)..."
+pip install ninja git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch -q
+echo "✓ tiny-cuda-nn installed"
+
+# Install remaining dependencies from requirements file
 if [ -f "requirements-gaussiandreamer.txt" ]; then
-    echo "  Installing GaussianDreamer dependencies from requirements file..."
+    echo "  Installing remaining GaussianDreamer dependencies..."
     pip install -r requirements-gaussiandreamer.txt --index-url https://download.pytorch.org/whl/cu121 -q
     echo "✓ GaussianDreamer dependencies installed"
 else

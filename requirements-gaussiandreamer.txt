@@ -1,13 +1,10 @@
 # GaussianDreamer image-to-3D Gaussian generation dependencies (Phase 2)
 # This file is used independently in setup-generation.sh
+# Note: PyTorch installed first in setup script (required for tiny-cuda-nn build)
 # Note: threestudio installed separately with --no-deps for isolation
-# Note: PyTorch/numpy/Pillow re-enforced in setup script to resolve conflicts
+# Note: numpy/Pillow re-enforced in setup script to resolve conflicts
 
-# Core dependencies - enforced versions to prevent conflicts
-# (Will be re-installed in setup script if other packages upgrade them)
-torch==2.5.1
-torchvision==0.20.1  
-torchaudio==2.5.1
+# Core dependencies
 numpy<2.0.0,>=1.24.3
 Pillow>=9.5.0,<10.0.0
 
