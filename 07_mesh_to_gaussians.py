@@ -89,7 +89,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def sample_mesh_surface(mesh, num_points):
+def sample_mesh_surface(mesh, num_points, input_image_path=None):
     """Sample points uniformly on mesh surface."""
     console.print(f"Sampling {num_points} points on mesh surface...")
     
@@ -97,19 +97,52 @@ def sample_mesh_surface(mesh, num_points):
     points, face_indices = trimesh.sample.sample_surface(mesh, num_points)
     normals = mesh.face_normals[face_indices]
     
-    # Get vertex colors if available
-    if hasattr(mesh.visual, 'vertex_colors') and mesh.visual.vertex_colors is not None:
-        # Get colors from the mesh vertices
-        vertex_colors = mesh.visual.vertex_colors[:, :3].astype(np.float32) / 255.0
-        
-        # For each sampled point, get color from nearest vertex
-        from scipy.spatial import cKDTree
-        tree = cKDTree(mesh.vertices)
-        _, nearest_vertices = tree.query(points)
-        colors = vertex_colors[nearest_vertices]
-    else:
-        # Default gray color
-        colors = np.ones((num_points, 3), dtype=np.float32) * 0.5
+    # Try to get colors from input image if available
+    colors = None
+    if input_image_path and Path(input_image_path).exists():
+        try:
+            console.print(f"Extracting colors from input image: {input_image_path}")
+            img = Image.open(input_image_path).convert('RGB')
+            img_array = np.array(img).astype(np.float32) / 255.0
+            H, W = img_array.shape[:2]
+            
+            # Project mesh points to image space (assuming front view)
+            # Normalize points to [0, 1] based on mesh bounds
+            bounds = mesh.bounds
+            normalized_points = (points - bounds[0]) / (bounds[1] - bounds[0])
+            
+            # Map to image coordinates (X -> U, Y -> V, ignore Z)
+            u = (normalized_points[:, 0] * (W - 1)).astype(int)
+            v = ((1 - normalized_points[:, 1]) * (H - 1)).astype(int)  # Flip Y
+            
+            # Clamp to image bounds
+            u = np.clip(u, 0, W - 1)
+            v = np.clip(v, 0, H - 1)
+            
+            # Sample colors from image
+            colors = img_array[v, u]
+            console.print(f"✓ Extracted colors from input image")
+            
+        except Exception as e:
+            console.print(f"[yellow]Could not extract colors from image: {e}[/yellow]")
+            colors = None
+    
+    # Fallback: check mesh vertex colors
+    if colors is None:
+        if hasattr(mesh.visual, 'vertex_colors') and mesh.visual.vertex_colors is not None:
+            # Get colors from the mesh vertices
+            vertex_colors = mesh.visual.vertex_colors[:, :3].astype(np.float32) / 255.0
+            
+            # For each sampled point, get color from nearest vertex
+            from scipy.spatial import cKDTree
+            tree = cKDTree(mesh.vertices)
+            _, nearest_vertices = tree.query(points)
+            colors = vertex_colors[nearest_vertices]
+            console.print(f"✓ Using mesh vertex colors")
+        else:
+            # Default: use white/bright color so object is visible
+            colors = np.ones((num_points, 3), dtype=np.float32) * 0.9
+            console.print(f"[yellow]No colors available, using white (0.9)[/yellow]")
     
     console.print(f"✓ Sampled {len(points)} points")
     return points, normals, colors
@@ -394,8 +427,13 @@ def main():
     args.initial_opacity = initial_opacity
     args.scale_factor = scale_factor
     
+    # Find input image (from Module 06)
+    input_image_path = mesh_path.parent / "input_image.png"
+    if not input_image_path.exists():
+        input_image_path = None
+    
     # Sample mesh surface
-    points, normals, colors = sample_mesh_surface(mesh, args.num_points)
+    points, normals, colors = sample_mesh_surface(mesh, args.num_points, input_image_path)
     
     # Initialize Gaussian parameters
     gaussians = initialize_gaussians(points, normals, colors, args)
