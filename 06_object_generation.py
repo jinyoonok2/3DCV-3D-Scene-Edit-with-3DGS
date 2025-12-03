@@ -2,14 +2,13 @@
 """
 06_object_generation.py - Generate 3D Object from Text/Image
 
-Goal: Generate a 3D mesh from text prompt or image using TripoSR.
+Goal: Generate a 3D mesh from image using TripoSR.
 
 This module uses TripoSR (VAST AI Research) for fast single-image 3D reconstruction.
-It supports text-to-image (via diffusion models) → image-to-3D workflows.
+It converts images to 3D meshes directly.
 
 Inputs:
-  --prompt: Text description of object to generate (e.g., "red flower in pot")
-  --image: Path to input image (alternative to text prompt)
+  --image: Path or URL to input image (supports Google Drive links, direct URLs, or local paths)
   --output_dir: Directory to save generated mesh (default: from config)
 
 Outputs (saved in output_dir/06_object_gen/):
@@ -71,7 +70,7 @@ except ImportError:
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Generate 3D object from text prompt or image using TripoSR"
+        description="Generate 3D object from image using TripoSR"
     )
     parser.add_argument(
         "--config",
@@ -79,11 +78,7 @@ def parse_args():
         default="config.yaml",
         help="Path to config file",
     )
-    parser.add_argument(
-        "--prompt",
-        type=str,
-        help="Text prompt for object generation (e.g., 'red flower in pot')",
-    )
+
     parser.add_argument(
         "--image",
         type=str,
@@ -293,17 +288,23 @@ def main():
         else:
             # Local path
             image_path = args.image
-    elif args.prompt:
-        console.print("[red]Error: Text-to-image generation not yet implemented![/red]")
-        console.print("Please provide an image with --image")
-        console.print("\nAlternatively, you can:")
-        console.print("1. Generate an image using Stable Diffusion")
-        console.print("2. Find/download an image of the object")
-        console.print("3. Pass it to this script with --image path/to/image.png")
-        sys.exit(1)
     else:
-        console.print("[red]Error: Either --prompt or --image must be provided![/red]")
-        sys.exit(1)
+        # Try to use config values
+        config_obj_gen = config.config.get('replacement', {}).get('object_generation', {})
+        config_image = config_obj_gen.get('image_url')
+        
+        if config_image:
+            console.print(f"[cyan]Using image from config:[/cyan] {config_image}")
+            if config_image.startswith('http://') or config_image.startswith('https://') or 'drive.google.com' in config_image:
+                image_path = download_image_from_url(config_image)
+            else:
+                image_path = config_image
+        else:
+            console.print("[red]Error: No image source found![/red]")
+            console.print("Please provide one of:")
+            console.print("1. CLI argument: --image path/to/image.png")
+            console.print("2. Config setting: replacement.object_generation.image_url")
+            sys.exit(1)
     
     # Load and preprocess image
     console.print("\n" + "="*80)
