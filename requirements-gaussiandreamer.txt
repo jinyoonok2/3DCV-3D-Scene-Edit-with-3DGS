@@ -23,6 +23,7 @@ onnxruntime
 # 3D processing
 trimesh
 pyglet<2
+libigl  # Python bindings for libigl (geometry processing)
 
 # Image downloading
 gdown
