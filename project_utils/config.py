@@ -81,8 +81,8 @@ class ProjectConfig:
         output_config = self.config.get('output', {})
         subdirs = output_config.get('subdirs', {})
         
-        # Create renders subdirs for relevant modules
-        if any(x in module_name for x in ['render', 'training', 'editing', 'optimization']):
+        # Create renders subdirs for relevant modules (specific modules only, not parent dirs)
+        if any(x in module_name for x in ['render', 'training', 'optimization']) and not module_name.endswith('_scene_editing'):
             for subdir in subdirs.get('renders', ['train', 'val']):
                 (module_path / 'renders' / subdir).mkdir(parents=True, exist_ok=True)
                 
