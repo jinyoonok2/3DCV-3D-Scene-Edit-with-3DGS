@@ -240,8 +240,12 @@ def render_preview(gaussians, output_dir):
         
         console.print("Rendering preview images...")
         
+        # Move to GPU if available
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        gaussians_gpu = {k: v.to(device) if torch.is_tensor(v) else v for k, v in gaussians.items()}
+        
         # Get Gaussian bounds
-        means = gaussians['means']
+        means = gaussians_gpu['means']
         center = means.mean(dim=0)
         size = (means.max(dim=0)[0] - means.min(dim=0)[0]).max().item()
         
@@ -257,7 +261,7 @@ def render_preview(gaussians, output_dir):
         for i, angle in enumerate(angles):
             # Camera position (orbit around object)
             angle_rad = np.deg2rad(angle)
-            cam_pos = center.numpy() + np.array([
+            cam_pos = center.cpu().numpy() + np.array([
                 np.cos(angle_rad) * distance,
                 0,
                 np.sin(angle_rad) * distance
@@ -288,20 +292,20 @@ def render_preview(gaussians, output_dir):
             proj_mat[3, 2] = -1
             
             # Combined view-projection
-            viewmat = torch.from_numpy(view_mat).float()
+            viewmat = torch.from_numpy(view_mat).float().to(device)
             K = torch.tensor([
                 [focal, 0, W / 2],
                 [0, focal, H / 2],
                 [0, 0, 1]
-            ]).float()
+            ]).float().to(device)
             
             # Render
             render_colors, render_alphas, meta = rasterization(
-                means=gaussians['means'],
-                quats=gaussians['quats'],
-                scales=torch.exp(gaussians['scales']),
-                opacities=torch.sigmoid(gaussians['opacities']).squeeze(-1),
-                colors=gaussians['sh0'],
+                means=gaussians_gpu['means'],
+                quats=gaussians_gpu['quats'],
+                scales=torch.exp(gaussians_gpu['scales']),
+                opacities=torch.sigmoid(gaussians_gpu['opacities']).squeeze(-1),
+                colors=gaussians_gpu['sh0'],
                 viewmats=viewmat[None],
                 Ks=K[None],
                 width=W,
