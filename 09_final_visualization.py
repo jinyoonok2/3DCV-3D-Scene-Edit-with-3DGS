@@ -267,19 +267,36 @@ def main():
     
     # Load config
     config = ProjectConfig(args.config)
+    viz_config = config.config.get('replacement', {}).get('visualization', {})
+    project_name = config.get("project", "name")
     
     # Setup paths
     if args.merged_ckpt:
         merged_ckpt = Path(args.merged_ckpt)
     else:
-        # Auto-detect from Module 08
-        merged_ckpt = config.get_checkpoint_path('merged')
+        # Use config value
+        merged_config = viz_config.get('merged_checkpoint')
+        if merged_config:
+            merged_ckpt = Path(str(merged_config).replace('${project.name}', project_name))
+            console.print(f"[cyan]Using merged checkpoint from config:[/cyan] {merged_ckpt}")
+        else:
+            # Fallback to auto-detect
+            merged_ckpt = config.get_path('scene_placement') / 'merged_gaussians.pt'
         if not merged_ckpt.exists():
             console.print(f"[red]Merged checkpoint not found: {merged_ckpt}[/red]")
             console.print("Run Module 08 first or provide --merged_ckpt")
             sys.exit(1)
     
-    original_ckpt = Path(args.original_ckpt) if args.original_ckpt else config.get_checkpoint_path('initial')
+    if args.original_ckpt:
+        original_ckpt = Path(args.original_ckpt)
+    else:
+        original_config = viz_config.get('original_checkpoint')
+        if original_config:
+            original_ckpt = Path(str(original_config).replace('${project.name}', project_name))
+            console.print(f"[cyan]Using original checkpoint from config:[/cyan] {original_ckpt}")
+        else:
+            original_ckpt = config.get_checkpoint_path('initial')
+    
     data_root = Path(args.data_root) if args.data_root else Path(config.get_path('dataset_root'))
     
     if args.output_dir:

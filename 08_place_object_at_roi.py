@@ -58,14 +58,12 @@ def parse_args():
     parser.add_argument(
         "--object_gaussians",
         type=str,
-        required=True,
-        help="Path to object Gaussians (.pt from Module 07)",
+        help="Path to object Gaussians (.pt from Module 07). If not provided, uses config.",
     )
     parser.add_argument(
         "--roi",
         type=str,
-        required=True,
-        help="Path to ROI file (.pt from Module 04a)",
+        help="Path to ROI file (.pt from Module 04a). If not provided, uses config.",
     )
     parser.add_argument(
         "--original_scene",
@@ -75,8 +73,7 @@ def parse_args():
     parser.add_argument(
         "--scene_gaussians",
         type=str,
-        required=True,
-        help="Path to scene Gaussians after removal (.pt from Module 05a or 05c)",
+        help="Path to scene Gaussians after removal (.pt from Module 05a or 05c). If not provided, uses config.",
     )
     parser.add_argument(
         "--output",
@@ -329,20 +326,61 @@ def main():
     console.print("Module 08: Place Object at ROI")
     console.print("="*80 + "\n")
     
+    # Load config
+    config = ProjectConfig(args.config)
+    placement_config = config.config.get('replacement', {}).get('placement', {})
+    project_name = config.get("project", "name")
+    
+    # Get paths from config or CLI
+    if args.object_gaussians:
+        object_path = args.object_gaussians
+    else:
+        object_path_config = placement_config.get('object_gaussians')
+        if object_path_config:
+            object_path = str(object_path_config).replace('${project.name}', project_name)
+            console.print(f"[cyan]Using object_gaussians from config:[/cyan] {object_path}")
+        else:
+            console.print("[red]Error: No object_gaussians path found![/red]")
+            console.print("Provide: --object_gaussians or set replacement.placement.object_gaussians in config")
+            sys.exit(1)
+    
+    if args.roi:
+        roi_path = args.roi
+    else:
+        roi_path_config = placement_config.get('roi_file')
+        if roi_path_config:
+            roi_path = str(roi_path_config).replace('${project.name}', project_name)
+            console.print(f"[cyan]Using roi from config:[/cyan] {roi_path}")
+        else:
+            console.print("[red]Error: No ROI path found![/red]")
+            console.print("Provide: --roi or set replacement.placement.roi_file in config")
+            sys.exit(1)
+    
+    if args.scene_gaussians:
+        scene_path = args.scene_gaussians
+    else:
+        scene_path_config = placement_config.get('scene_gaussians')
+        if scene_path_config:
+            scene_path = str(scene_path_config).replace('${project.name}', project_name)
+            console.print(f"[cyan]Using scene_gaussians from config:[/cyan] {scene_path}")
+        else:
+            console.print("[red]Error: No scene_gaussians path found![/red]")
+            console.print("Provide: --scene_gaussians or set replacement.placement.scene_gaussians in config")
+            sys.exit(1)
+    
     # Load checkpoints
-    object_ckpt = load_checkpoint(args.object_gaussians, "Object Gaussians")
-    roi_mask = load_checkpoint(args.roi, "ROI")  # This is just a tensor from Module 04a
-    scene_ckpt = load_checkpoint(args.scene_gaussians, "Scene Gaussians")
+    object_ckpt = load_checkpoint(object_path, "Object Gaussians")
+    roi_mask = load_checkpoint(roi_path, "ROI")  # This is just a tensor from Module 04a
+    scene_ckpt = load_checkpoint(scene_path, "Scene Gaussians")
     
     # Load original scene for ROI positions if provided
     if args.original_scene:
         original_ckpt = load_checkpoint(args.original_scene, "Original Scene (for ROI positions)")
         original_gaussians = original_ckpt.get("splats", original_ckpt.get("gaussians", original_ckpt))
     else:
-        # Infer from config
-        config = ProjectConfig(args.config)
+        # Use config default
         original_path = config.get_path('initial_training') / 'ckpt_initial.pt'
-        console.print(f"Inferring original scene path: {original_path}")
+        console.print(f"[cyan]Using original scene from config:[/cyan] {original_path}")
         original_ckpt = load_checkpoint(str(original_path), "Original Scene (for ROI positions)")
         original_gaussians = original_ckpt.get("splats", original_ckpt.get("gaussians", original_ckpt))
     
@@ -365,9 +403,13 @@ def main():
     if args.output:
         output_path = Path(args.output)
     else:
-        # Use unified structure: scene_placement module
-        config = ProjectConfig(args.config)
-        output_path = config.get_checkpoint_path('merged')
+        # Use config value
+        output_config = placement_config.get('output_merged')
+        if output_config:
+            output_path = Path(str(output_config).replace('${project.name}', project_name))
+            console.print(f"[cyan]Saving to:[/cyan] {output_path}")
+        else:
+            output_path = config.get_path('scene_placement') / 'merged_gaussians.pt'
     
     # Prepare metadata
     metadata = {
