@@ -33,6 +33,7 @@ import torch
 import trimesh
 from rich.console import Console
 from scipy.spatial.transform import Rotation as R
+from PIL import Image
 
 # Import project config
 from project_utils.config import ProjectConfig
@@ -227,6 +228,102 @@ def save_gaussians(gaussians, mesh_path, output_path, metadata):
     with open(manifest_path, 'w') as f:
         json.dump(metadata, f, indent=2)
     
+
+def render_preview(gaussians, output_dir):
+    """Render a simple preview of the Gaussians from multiple angles."""
+    try:
+        from gsplat import rasterization
+        
+        output_dir = Path(output_dir)
+        preview_dir = output_dir / "preview"
+        preview_dir.mkdir(exist_ok=True)
+        
+        console.print("Rendering preview images...")
+        
+        # Get Gaussian bounds
+        means = gaussians['means']
+        center = means.mean(dim=0)
+        size = (means.max(dim=0)[0] - means.min(dim=0)[0]).max().item()
+        
+        # Camera parameters
+        W, H = 512, 512
+        fov = 50
+        focal = 0.5 * H / np.tan(0.5 * fov * np.pi / 180)
+        
+        # Create simple camera matrices for 4 views
+        angles = [0, 90, 180, 270]
+        distance = size * 2.5
+        
+        for i, angle in enumerate(angles):
+            # Camera position (orbit around object)
+            angle_rad = np.deg2rad(angle)
+            cam_pos = center.numpy() + np.array([
+                np.cos(angle_rad) * distance,
+                0,
+                np.sin(angle_rad) * distance
+            ])
+            
+            # Look-at matrix
+            forward = center.numpy() - cam_pos
+            forward = forward / np.linalg.norm(forward)
+            right = np.cross(np.array([0, 1, 0]), forward)
+            right = right / np.linalg.norm(right)
+            up = np.cross(forward, right)
+            
+            # View matrix (world to camera)
+            view_mat = np.eye(4)
+            view_mat[:3, 0] = right
+            view_mat[:3, 1] = up
+            view_mat[:3, 2] = -forward
+            view_mat[:3, 3] = cam_pos
+            view_mat = np.linalg.inv(view_mat)
+            
+            # Projection matrix
+            near, far = 0.01, 100.0
+            proj_mat = np.zeros((4, 4))
+            proj_mat[0, 0] = focal / (W / 2)
+            proj_mat[1, 1] = focal / (H / 2)
+            proj_mat[2, 2] = -(far + near) / (far - near)
+            proj_mat[2, 3] = -2 * far * near / (far - near)
+            proj_mat[3, 2] = -1
+            
+            # Combined view-projection
+            viewmat = torch.from_numpy(view_mat).float()
+            K = torch.tensor([
+                [focal, 0, W / 2],
+                [0, focal, H / 2],
+                [0, 0, 1]
+            ]).float()
+            
+            # Render
+            render_colors, render_alphas, meta = rasterization(
+                means=gaussians['means'],
+                quats=gaussians['quats'],
+                scales=torch.exp(gaussians['scales']),
+                opacities=torch.sigmoid(gaussians['opacities']).squeeze(-1),
+                colors=gaussians['sh0'],
+                viewmats=viewmat[None],
+                Ks=K[None],
+                width=W,
+                height=H,
+                packed=False,
+                absgrad=False,
+            )
+            
+            # Convert to image
+            img = render_colors[0].detach().cpu().numpy()
+            img = (np.clip(img, 0, 1) * 255).astype(np.uint8)
+            
+            # Save
+            Image.fromarray(img).save(preview_dir / f"view_{i:02d}_{angle}deg.png")
+        
+        console.print(f"✓ Preview images saved to {preview_dir}")
+        return True
+        
+    except Exception as e:
+        console.print(f"[yellow]Could not generate preview: {e}[/yellow]")
+        return False
+    
     console.print(f"\n[green]✓[/green] Mesh to Gaussians conversion complete!")
     console.print(f"Output: {output_path}")
     console.print(f"  - Gaussians: {len(gaussians['means'])} splats")
@@ -338,6 +435,9 @@ def main():
     
     # Save Gaussians
     save_gaussians(gaussians, args.mesh, output_path, metadata)
+    
+    # Render preview images
+    render_preview(gaussians, output_path.parent)
 
 
 if __name__ == "__main__":
