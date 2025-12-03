@@ -11,6 +11,8 @@ build/
 # Virtual environments  
 .venv/
 venv/
+venv-removal/
+venv-generation/
 env/
 ENV/
 
@@ -21,6 +23,7 @@ envs/
 # Data and external dependencies
 datasets/
 GroundingDINO/
+GaussianDreamer/
 sam2/
 gsplat-src/
 TripoSR/
@@ -35,6 +38,7 @@ models/
 
 # Outputs and results
 outputs/
+comparison_grids/
 test_results/
 results/
 *.zip
