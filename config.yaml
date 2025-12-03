@@ -65,21 +65,20 @@ segmentation:
   sam_thresh: 0.3                          # SAM2 confidence threshold (0.0-1.0)
   
   # Spatial filtering (optional)
-  reference_box: [0.36, 0.2, 0.64, 0.62]  # [x1,y1,x2,y2] reference box for spatial filtering
+  reference_box: [0.36, 0.2, 0.64, 0.58]  # [x1,y1,x2,y2] reference box for spatial filtering
   reference_box_normalized: true           # If true, coordinates are [0-1], else pixels
   reference_overlap_thresh: 0.7            # Minimum overlap with reference box (0.0-1.0)
   
 roi:
-  threshold: 0.01                          # ROI weight threshold for deletion (lower = more permissive)
+  threshold: 0.05                          # ROI weight threshold for deletion (lower = more permissive)
   min_views: 3                             # Min views for Gaussian to be in ROI
   
 inpainting:
   # Module 05a - Removal
   removal:
-    roi_threshold: 0.01                    # Which Gaussians to delete (lower = more permissive)
+    roi_threshold: 0.05                    # Which Gaussians to delete (same as ROI threshold)
     
-  # Module 05b - LaMa Inpainting (default settings)
-  # For SDXL inpainting, use 05b_inpaint_holes_sdxl.py with CLI args
+  # Module 05b - LaMa Inpainting (default method for clean object removal)
   
   # Module 05c - Optimization
   optimization:

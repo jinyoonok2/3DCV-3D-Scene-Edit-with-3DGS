@@ -11,9 +11,8 @@ echo "  - GroundingDINO SwinT-OGC (~662 MB)"
 echo "  - SAM2 Hiera Large (~857 MB)"
 echo "  Total: ~1.5 GB"
 echo ""
-echo "Note: Inpainting models will be automatically downloaded on first run:"
-echo "  - SDXL-Inpainting: ~6 GB (creative inpainting)"
-echo "  - LaMa: ~200 MB (object removal)"
+echo "Note: LaMa inpainting model will be automatically downloaded on first run:"
+echo "  - LaMa: ~200 MB (clean object removal)"
 echo ""
 
 # Create models directory

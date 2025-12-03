@@ -136,7 +136,7 @@ inpainting:
       sh0: 0.0025
 ```
 
-**Note**: SDXL inpainting parameters are NOT in config - pass via CLI to `05b_inpaint_holes_sdxl.py`
+**Note**: LaMa inpainting uses automatic hole detection and filling
 
 **Usage modes:**
 - Config-only: `python module.py`

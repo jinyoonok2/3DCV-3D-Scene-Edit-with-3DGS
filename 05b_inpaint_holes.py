@@ -21,7 +21,7 @@ Outputs (saved in output_dir/05b_inpainted/):
   - targets/train/*.png: Inpainted target images
   - manifest.json: Metadata
 
-Note: For SDXL-based inpainting (ablation study), use 05b_inpaint_holes_sdxl.py
+Note: This uses LaMa (Large Mask Inpainting) for seamless hole filling
 """
 
 import argparse
