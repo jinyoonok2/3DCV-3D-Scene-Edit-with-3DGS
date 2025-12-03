@@ -1,12 +1,12 @@
 # GaussianDreamer image-to-3D Gaussian generation dependencies (Phase 2)
 # This file is used independently in setup-generation.sh
 # Note: threestudio must be installed from GitHub (see setup-generation.sh)
+# Note: xformers installed separately in setup script with correct PyTorch version
 # Common dependencies (numpy, Pillow, imageio, lpips) already in Phase 1
 
 # Core 3D generation framework
 omegaconf
 einops
-xformers
 ninja
 
 # Background removal

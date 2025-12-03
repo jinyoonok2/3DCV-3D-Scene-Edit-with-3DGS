@@ -84,6 +84,11 @@ pip install --no-deps "torch==2.5.1" "torchvision==0.20.1" "torchaudio==2.5.1" -
 pip install "numpy<2.0.0,>=1.24.3" "Pillow>=9.5.0,<10.0.0" -q
 echo "✓ Core dependencies pinned"
 
+# Install xformers compatible with PyTorch 2.5.1
+echo "  Installing xformers for PyTorch 2.5.1..."
+pip install xformers --index-url https://download.pytorch.org/whl/cu121 -q
+echo "✓ xformers installed"
+
 # Install threestudio from GitHub (not available on PyPI)
 echo "  Installing threestudio from GitHub..."
 pip install --no-deps git+https://github.com/threestudio-project/threestudio.git -q
