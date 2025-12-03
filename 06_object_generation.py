@@ -45,9 +45,20 @@ from project_utils.config import ProjectConfig
 
 console = Console()
 
-# Check for GaussianDreamer dependencies
+# Check for GaussianDreamerPro
+GAUSSIANDREAMERPRO_AVAILABLE = False
+GAUSSIANDREAMERPRO_DIR = Path("GaussianDreamerPro")
+if GAUSSIANDREAMERPRO_DIR.exists():
+    sys.path.insert(0, str(GAUSSIANDREAMERPRO_DIR / "stage1"))
+    sys.path.insert(0, str(GAUSSIANDREAMERPRO_DIR / "stage2"))
+    try:
+        import diff_gaussian_rasterization
+        GAUSSIANDREAMERPRO_AVAILABLE = True
+    except ImportError:
+        pass
+
+# Check for threestudio (legacy, optional)
 try:
-    # Try to import threestudio (optional - needed for full generation)
     import threestudio
     THREESTUDIO_AVAILABLE = True
 except ImportError:
@@ -214,10 +225,12 @@ def generate_gaussians_with_gaussiandreamer(
     output_dir=None,
 ):
     """
-    Generate 3D Gaussians using text-to-3D with threestudio/GaussianDreamer.
+    Generate 3D Gaussians using text-to-3D.
     
-    Uses DreamGaussian (fast text-to-3D) for quick generation.
-    For image conditioning, use the image as reference in the prompt.
+    Tries methods in order of preference:
+    1. GaussianDreamerPro (best quality, mesh-bound Gaussians)
+    2. threestudio/GaussianDreamer (if available)
+    3. Placeholder (for testing)
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -240,7 +253,23 @@ def generate_gaussians_with_gaussiandreamer(
     console.print(f"[cyan]Iterations:[/cyan] {iterations}")
     console.print(f"[cyan]Target points:[/cyan] {num_points}")
     
-    # Run text-to-3D generation with threestudio
+    # Try GaussianDreamerPro first (best quality)
+    if GAUSSIANDREAMERPRO_AVAILABLE:
+        console.print("[cyan]Using GaussianDreamerPro (high quality, mesh-bound)[/cyan]")
+        try:
+            gaussians_dict = generate_with_gaussiandreamerpro(
+                text_prompt=text_prompt,
+                num_points=num_points,
+                iterations=iterations,
+                device=device,
+                output_dir=output_dir,
+            )
+            return gaussians_dict
+        except Exception as e:
+            console.print(f"[yellow]GaussianDreamerPro failed: {e}[/yellow]")
+            console.print("[yellow]Falling back to alternative method...[/yellow]")
+    
+    # Try threestudio/GaussianDreamer
     try:
         gaussians_dict = run_threestudio_generation(
             text_prompt=text_prompt,
@@ -366,6 +395,236 @@ def run_threestudio_generation(
         sh_degree=sh_degree,
         device=device
     )
+
+
+def generate_with_gaussiandreamerpro(
+    text_prompt,
+    num_points=50000,
+    iterations=5000,
+    device="cuda",
+    output_dir=None,
+):
+    """
+    Generate 3D Gaussians using GaussianDreamerPro (two-stage generation).
+    
+    Stage 1: Generate coarse asset with Shap-E initialization
+    Stage 2: Refine with mesh-bound Gaussians
+    """
+    import subprocess
+    import shutil
+    from plyfile import PlyData, PlyElement
+    
+    console.print("\n[cyan]Running GaussianDreamerPro (two-stage generation)...[/cyan]")
+    
+    gaussiandreamerpro_dir = Path("GaussianDreamerPro")
+    if not gaussiandreamerpro_dir.exists():
+        raise FileNotFoundError(f"GaussianDreamerPro not found at {gaussiandreamerpro_dir}")
+    
+    # Create a simpler init prompt (first few words)
+    init_prompt = " ".join(text_prompt.split()[:3])  # e.g., "a simple white" from "a simple white coffee mug"
+    
+    #=========================================================================
+    # Stage 1: Coarse generation
+    #=========================================================================
+    console.print(f"[cyan]Stage 1: Generating coarse asset...[/cyan]")
+    console.print(f"[dim]Prompt: {text_prompt}[/dim]")
+    console.print(f"[dim]Init prompt: {init_prompt}[/dim]")
+    
+    stage1_dir = gaussiandreamerpro_dir / "stage1"
+    stage1_cmd = [
+        "python", "train.py",
+        "--opt", "./configs/temp.yaml",  # Use temp config for quick generation
+        "--prompt", text_prompt,
+        "--initprompt", init_prompt,
+    ]
+    
+    # Run stage 1
+    result = subprocess.run(
+        stage1_cmd,
+        cwd=str(stage1_dir),
+        capture_output=True,
+        text=True,
+    )
+    
+    if result.returncode != 0:
+        console.print(f"[red]Stage 1 failed:[/red]\n{result.stderr}")
+        raise RuntimeError("GaussianDreamerPro Stage 1 failed")
+    
+    # Find the stage 1 output directory (most recent)
+    stage1_output_dir = max(
+        (stage1_dir / "outputs").glob(f"*{init_prompt.replace(' ', '_')}*"),
+        key=lambda p: p.stat().st_mtime
+    )
+    console.print(f"[green]✓ Stage 1 complete:[/green] {stage1_output_dir.name}")
+    
+    #=========================================================================
+    # Stage 2: Refinement with mesh-bound Gaussians
+    #=========================================================================
+    console.print(f"\n[cyan]Stage 2: Refining with mesh-bound Gaussians...[/cyan]")
+    
+    stage2_dir = gaussiandreamerpro_dir / "stage2"
+    
+    # First export mesh from stage 1
+    mesh_export_cmd = [
+        "python", "meshexport.py",
+        "-c", str(stage1_output_dir),
+    ]
+    
+    result = subprocess.run(
+        mesh_export_cmd,
+        cwd=str(stage2_dir),
+        capture_output=True,
+        text=True,
+    )
+    
+    if result.returncode != 0:
+        console.print(f"[red]Mesh export failed:[/red]\n{result.stderr}")
+        raise RuntimeError("GaussianDreamerPro mesh export failed")
+    
+    # Find the exported coarse mesh
+    coarse_mesh_path = stage1_output_dir / "coarse_mesh"
+    coarse_mesh_file = list(coarse_mesh_path.glob("*.ply"))[0]
+    console.print(f"[green]✓ Mesh exported:[/green] {coarse_mesh_file.name}")
+    
+    # Run stage 2 refinement
+    stage2_cmd = [
+        "python", "trainrefine.py",
+        "--prompt", text_prompt,
+        "--coarse_mesh_path", str(coarse_mesh_file),
+    ]
+    
+    result = subprocess.run(
+        stage2_cmd,
+        cwd=str(stage2_dir),
+        capture_output=True,
+        text=True,
+    )
+    
+    if result.returncode != 0:
+        console.print(f"[red]Stage 2 failed:[/red]\n{result.stderr}")
+        raise RuntimeError("GaussianDreamerPro Stage 2 failed")
+    
+    # Find the stage 2 output (refined Gaussians)
+    stage2_output_dir = max(
+        (stage2_dir / "outputs").glob("*"),
+        key=lambda p: p.stat().st_mtime
+    )
+    console.print(f"[green]✓ Stage 2 complete:[/green] {stage2_output_dir.name}")
+    
+    #=========================================================================
+    # Extract Gaussians from .ply output
+    #=========================================================================
+    console.print(f"\n[cyan]Extracting Gaussians from output...[/cyan]")
+    
+    # Find the final .ply file (typically in iterations/ subfolder)
+    ply_files = list((stage2_output_dir / "point_cloud" / "iterations").glob("*.ply"))
+    if not ply_files:
+        ply_files = list(stage2_output_dir.glob("**/*.ply"))
+    
+    final_ply = max(ply_files, key=lambda p: p.stat().st_mtime)
+    console.print(f"[cyan]Loading Gaussians from:[/cyan] {final_ply.name}")
+    
+    # Parse .ply file and convert to our format
+    gaussians_dict = load_gaussians_from_ply(final_ply, device=device)
+    
+    console.print(f"[green]✓ GaussianDreamerPro generation complete![/green]")
+    console.print(f"  Extracted {len(gaussians_dict['means'])} Gaussian splats")
+    
+    return gaussians_dict
+
+
+def load_gaussians_from_ply(ply_path, device="cuda"):
+    """
+    Load Gaussians from GaussianDreamerPro .ply output and convert to our format.
+    
+    GaussianDreamerPro saves in 3D Gaussian Splatting format with mesh binding.
+    """
+    from plyfile import PlyData
+    import numpy as np
+    
+    console.print(f"[dim]Parsing .ply file...[/dim]")
+    
+    plydata = PlyData.read(ply_path)
+    vertices = plydata['vertex']
+    
+    # Extract positions
+    positions = np.stack([vertices['x'], vertices['y'], vertices['z']], axis=1)
+    means = torch.from_numpy(positions).float().to(device)
+    
+    # Extract scales (log-space in some formats)
+    if 'scale_0' in vertices:
+        scales = np.stack([
+            vertices['scale_0'],
+            vertices['scale_1'],
+            vertices['scale_2']
+        ], axis=1)
+        scales = torch.from_numpy(scales).float().to(device)
+        scales = torch.exp(scales)  # Convert from log-space
+    else:
+        # Fallback: use default small scales
+        scales = torch.ones(len(means), 3, device=device) * 0.003
+    
+    # Extract rotations (quaternions)
+    if 'rot_0' in vertices:
+        quats = np.stack([
+            vertices['rot_0'],  # w component
+            vertices['rot_1'],  # x component
+            vertices['rot_2'],  # y component
+            vertices['rot_3']   # z component
+        ], axis=1)
+        quats = torch.from_numpy(quats).float().to(device)
+        quats = quats / quats.norm(dim=-1, keepdim=True)  # Normalize
+    else:
+        # Fallback: identity rotations
+        quats = torch.tensor([[1, 0, 0, 0]], device=device).repeat(len(means), 1)
+    
+    # Extract opacities
+    if 'opacity' in vertices:
+        opacities = vertices['opacity']
+        opacities = torch.from_numpy(opacities).float().to(device).unsqueeze(1)
+        opacities = torch.sigmoid(opacities)  # Convert from logit space
+    else:
+        # Fallback: mostly opaque
+        opacities = torch.ones(len(means), 1, device=device) * 0.8
+    
+    # Extract spherical harmonics
+    # SH coefficients are stored as f_dc_0, f_dc_1, f_dc_2 (DC) and f_rest_* (rest)
+    sh_dc = []
+    if all(f'f_dc_{i}' in vertices for i in range(3)):
+        sh_dc = np.stack([vertices[f'f_dc_{i}'] for i in range(3)], axis=1)
+        sh0 = torch.from_numpy(sh_dc).float().to(device).unsqueeze(1)  # [N, 1, 3]
+    else:
+        # Fallback: neutral gray
+        sh0 = torch.ones(len(means), 1, 3, device=device) * 0.5
+    
+    # Extract remaining SH coefficients
+    sh_rest_keys = [k for k in vertices.data.dtype.names if k.startswith('f_rest_')]
+    if sh_rest_keys:
+        num_rest = len(sh_rest_keys) // 3  # 3 channels per SH coefficient
+        sh_rest = np.stack([vertices[k] for k in sorted(sh_rest_keys)], axis=1)
+        sh_rest = sh_rest.reshape(len(means), num_rest, 3)
+        shN = torch.from_numpy(sh_rest).float().to(device)
+        sh_degree = int(np.sqrt(num_rest + 1)) - 1
+    else:
+        # Fallback: no higher-order SH
+        shN = torch.zeros(len(means), 0, 3, device=device)
+        sh_degree = 0
+    
+    gaussians = {
+        "means": means,
+        "scales": scales,
+        "quats": quats,
+        "opacities": opacities,
+        "sh0": sh0,
+        "shN": shN,
+        "sh_degree": sh_degree,
+    }
+    
+    console.print(f"[green]✓ Loaded {len(means)} Gaussians from .ply[/green]")
+    console.print(f"  Position range: [{means.min().item():.3f}, {means.max().item():.3f}]")
+    console.print(f"  SH degree: {sh_degree}")
+    
+    return gaussians
 
 
 def create_placeholder_gaussians(num_points=50000, sh_degree=3, device="cuda"):
