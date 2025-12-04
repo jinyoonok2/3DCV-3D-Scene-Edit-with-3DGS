@@ -1,14 +1,11 @@
 #!/bin/bash
 
-# 3D Scene Edit with 3DGS - Object Generation Setup (Phase 2)
-# This script creates a separate conda environment for object generation (steps 06+)
-# Uses GaussianDreamerPro for high-quality text-to-3D generation
-# Follows official GaussianDreamerPro installation with Python 3.8 + PyTorch 2.0.1
-# Run this AFTER completing object removal phase (steps 00-05c)
+# 3D Scene Edit with 3DGS - Object Generation Setup
+# For VastAI PyTorch templates with CUDA 11.8 (e.g., vastai/pytorch:2.0.1-cuda-11.8.0)
+# Uses system Python - no conda/venv needed
 
 set -e  # Exit on error
 
-CONDA_ENV="gaussiandreamerpro"
 GAUSSIANDREAMERPRO_DIR="GaussianDreamerPro"
 RESET=false
 
@@ -20,57 +17,33 @@ for arg in "$@"; do
     esac
 done
 
-echo "========================================="
+echo "=========================================="
 echo "3D SCENE EDIT - OBJECT GENERATION SETUP"
-echo "Phase 2: Object generation with GaussianDreamerPro"
-echo "Adapted for VastAI: Python 3.8 + PyTorch 2.4.1 + CUDA 12.1"
+echo "Phase 2: GaussianDreamerPro"
+echo "For CUDA 11.8 templates (PyTorch 2.0.1)"
 echo "=========================================="
 echo ""
 
-# Check if conda is available
-if ! command -v conda &> /dev/null; then
-    echo "❌ Error: conda not found!"
-    echo "Please install Miniconda or Anaconda first."
-    echo "Visit: https://docs.conda.io/en/latest/miniconda.html"
+# Verify PyTorch is installed
+python -c "import torch; print(f'✓ PyTorch: {torch.__version__}')" || {
+    echo "❌ Error: PyTorch not found!"
+    echo "This script requires a VastAI template with PyTorch 2.0.1+cu118."
     exit 1
-fi
+}
 
-echo "✓ Conda found: $(conda --version)"
+python -c "import torch; print(f'✓ CUDA available: {torch.cuda.is_available()}')"
 echo ""
 
 #=============================================================================
-# 1. Create Conda Environment (Python 3.8)
+# 1. Clone GaussianDreamerPro
 #=============================================================================
-echo "Step 1: Setting up conda environment"
+echo "Step 1: Setting up GaussianDreamerPro repository"
 
 # Handle reset
 if [ "$RESET" = true ]; then
-    conda env remove -n "$CONDA_ENV" -y 2>/dev/null || true
     rm -rf "$GAUSSIANDREAMERPRO_DIR"
-    echo "  Removed existing environment and repository"
+    echo "  Removed existing repository"
 fi
-
-# Create conda environment
-if ! conda env list | grep -q "^$CONDA_ENV "; then
-    echo "  Creating conda environment: $CONDA_ENV (Python 3.8)..."
-    conda create -n "$CONDA_ENV" python=3.8 -y
-    echo "✓ Created conda environment: $CONDA_ENV"
-else
-    echo "✓ Conda environment already exists: $CONDA_ENV"
-fi
-
-# Initialize conda for bash
-eval "$(conda shell.bash hook)"
-
-# Activate environment
-conda activate "$CONDA_ENV"
-echo "✓ Activated conda environment: $CONDA_ENV"
-echo ""
-
-#=============================================================================
-# 2. Clone GaussianDreamerPro
-#=============================================================================
-echo "Step 2: Setting up GaussianDreamerPro repository"
 
 if [ ! -d "$GAUSSIANDREAMERPRO_DIR" ]; then
     git clone https://github.com/hustvl/GaussianDreamerPro.git
@@ -83,23 +56,18 @@ if [ ! -d "$GAUSSIANDREAMERPRO_DIR" ]; then
         echo "✓ Installed GLM library"
     fi
     cd ../../../..
-    
-    # Apply compatibility patches for PyTorch 2.4.1
-    chmod +x patch_gaussiandreamerpro.sh
-    ./patch_gaussiandreamerpro.sh
 else
     echo "✓ GaussianDreamerPro already exists"
 fi
 echo ""
 
 #=============================================================================
-# 3. Install Python Dependencies (WITHOUT PyTorch)
+# 2. Install Python Dependencies
 #=============================================================================
-echo "Step 3: Installing Python dependencies (except PyTorch)"
+echo "Step 2: Installing Python dependencies"
 
 if [ -f "requirements-gaussiandreamerpro.txt" ]; then
-    # Install dependencies but skip torch-related packages (install them later)
-    grep -v "^torch" requirements-gaussiandreamerpro.txt | pip install -r /dev/stdin
+    pip install -r requirements-gaussiandreamerpro.txt
     echo "✓ Python dependencies installed"
 else
     echo "❌ requirements-gaussiandreamerpro.txt not found!"
@@ -108,36 +76,25 @@ fi
 echo ""
 
 #=============================================================================
-# 4. Install PyTorch 2.4.1 + CUDA 12.1 (For CUDA 12.6 compatibility)
+# 3. Install PyTorch3D
 #=============================================================================
-echo "Step 4: Installing PyTorch 2.4.1 + CUDA 12.1 (forcing correct version)"
+echo "Step 3: Installing PyTorch3D"
 
-pip install --force-reinstall torch==2.4.1 torchvision==0.19.1 --index-url https://download.pytorch.org/whl/cu121
-echo "✓ Installed PyTorch 2.4.1 with CUDA 12.1"
+# For PyTorch 2.0.1 + CUDA 11.8
+pip install iopath fvcore
+pip install --no-index --no-cache-dir pytorch3d -f https://dl.fbaipublicfiles.com/pytorch3d/packaging/wheels/py310_cu118_pyt201/download.html || \
+pip install pytorch3d  # Fallback to build from source
 
-python -c "import torch; print(f'  PyTorch: {torch.__version__}')"
-python -c "import torch; print(f'  CUDA available: {torch.cuda.is_available()}')"
+echo "✓ PyTorch3D installed"
 echo ""
 
 #=============================================================================
-# 5. Install PyTorch3D (Build from source or conda)
+# 4. Build CUDA Kernels
 #=============================================================================
-echo "Step 5: Installing PyTorch3D"
+echo "Step 4: Building CUDA kernels"
 
-conda install -c iopath iopath -y
-conda install -c fvcore -c conda-forge fvcore -y
-# Try conda first (has wheels for various versions), fallback to pip build
-conda install -c pytorch3d pytorch3d -y || pip install pytorch3d
-echo "✓ Installed PyTorch3D"
-echo ""
-
-#=============================================================================
-# 6. Build CUDA Kernels
-#=============================================================================
-echo "Step 6: Building CUDA kernels"
-
-# Set CUDA_HOME for compilation
-export CUDA_HOME=/usr/local/cuda
+# Set CUDA_HOME if not already set
+export CUDA_HOME=${CUDA_HOME:-/usr/local/cuda}
 export PATH=$CUDA_HOME/bin:$PATH
 export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
 
@@ -148,26 +105,26 @@ cd "$GAUSSIANDREAMERPRO_DIR"
 
 # Build diff-gaussian-rasterization
 echo "  Building diff-gaussian-rasterization..."
-CUDA_HOME=/usr/local/cuda pip install ./submodules/diff-gaussian-rasterization
+CUDA_HOME=$CUDA_HOME pip install ./submodules/diff-gaussian-rasterization
 echo "  ✓ diff-gaussian-rasterization built"
 
 # Build diff-gaussian-rasterization_2dgs
 echo "  Building diff-gaussian-rasterization_2dgs..."
-CUDA_HOME=/usr/local/cuda pip install ./submodules/diff-gaussian-rasterization_2dgs
+CUDA_HOME=$CUDA_HOME pip install ./submodules/diff-gaussian-rasterization_2dgs
 echo "  ✓ diff-gaussian-rasterization_2dgs built"
 
 # Build simple-knn
 echo "  Building simple-knn..."
-CUDA_HOME=/usr/local/cuda pip install ./submodules/simple-knn
+CUDA_HOME=$CUDA_HOME pip install ./submodules/simple-knn
 echo "  ✓ simple-knn built"
 
 cd ..
 echo ""
 
 #=============================================================================
-# 7. Download Shap-E Checkpoint
+# 5. Download Shap-E Checkpoint
 #=============================================================================
-echo "Step 7: Setting up Shap-E checkpoint"
+echo "Step 5: Setting up Shap-E checkpoint"
 
 mkdir -p "$GAUSSIANDREAMERPRO_DIR/load"
 
@@ -201,9 +158,9 @@ fi
 echo ""
 
 #=============================================================================
-# 8. Verify Installation
+# 6. Verify Installation
 #=============================================================================
-echo "Step 8: Verifying installation"
+echo "Step 6: Verifying installation"
 
 python -c "
 import torch
@@ -220,13 +177,8 @@ echo "=========================================="
 echo "✓ SETUP COMPLETE!"
 echo "=========================================="
 echo ""
-echo "To use this environment:"
-echo "  conda activate $CONDA_ENV"
+echo "To generate 3D objects:"
 echo "  python 06_object_generation.py"
 echo ""
-echo "Note: This is a separate conda environment from Phase 1 (venv-removal)"
-echo "Phase 1 uses Python 3.12 + PyTorch 2.5.1"
-echo "Phase 2 uses Python 3.8 + PyTorch 2.0.1 (for GaussianDreamerPro compatibility)"
+echo "Note: Using system Python environment (no conda/venv needed)"
 echo ""
-    
-    # Try to download (update URL if needed based on actual hosting location)

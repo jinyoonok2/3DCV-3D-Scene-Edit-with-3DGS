@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# 3D Scene Edit with 3DGS - Object Generation Setup (For VastAI Templates)
-# For use with templates that already have PyTorch installed (e.g., vastai/pytorch)
-# This script works with the system Python environment
+# 3D Scene Edit with 3DGS - Object Generation Setup
+# For VastAI PyTorch templates with CUDA 11.8 (e.g., vastai/pytorch:2.0.1-cuda-11.8.0)
+# Uses system Python - no conda/venv needed
 
 set -e  # Exit on error
 
@@ -13,31 +13,39 @@ RESET=false
 for arg in "$@"; do
     case $arg in
         --reset|-r) RESET=true; shift ;;
-        *) echo "Usage: ./setup-generation-template.sh [--reset]"; exit 1 ;;
+        *) echo "Usage: ./setup-generation.sh [--reset]"; exit 1 ;;
     esac
 done
 
 echo "=========================================="
 echo "3D SCENE EDIT - OBJECT GENERATION SETUP"
-echo "Phase 2: GaussianDreamerPro (Template Mode)"
-echo "Using existing PyTorch installation"
+echo "Phase 2: GaussianDreamerPro"
+echo "For CUDA 12.1+ systems (PyTorch 2.4.1)"
 echo "=========================================="
 echo ""
 
 # Verify PyTorch is installed
 python -c "import torch; print(f'✓ PyTorch: {torch.__version__}')" || {
     echo "❌ Error: PyTorch not found!"
-    echo "This script requires a template with PyTorch pre-installed."
-    exit 1
+    echo "This script will install PyTorch 2.4.1+cu121."
 }
 
 python -c "import torch; print(f'✓ CUDA available: {torch.cuda.is_available()}')"
 echo ""
 
 #=============================================================================
-# 1. Clone GaussianDreamerPro
+# 1. Install PyTorch 2.4.1 + CUDA 12.1
 #=============================================================================
-echo "Step 1: Setting up GaussianDreamerPro repository"
+echo "Step 1: Installing PyTorch 2.4.1 + CUDA 12.1"
+
+pip install --force-reinstall torch==2.4.1 torchvision==0.19.1 --index-url https://download.pytorch.org/whl/cu121
+echo "✓ Installed PyTorch 2.4.1"
+echo ""
+
+#=============================================================================
+# 2. Clone GaussianDreamerPro  
+#=============================================================================
+echo "Step 2: Setting up GaussianDreamerPro repository"
 
 # Handle reset
 if [ "$RESET" = true ]; then
@@ -56,15 +64,19 @@ if [ ! -d "$GAUSSIANDREAMERPRO_DIR" ]; then
         echo "✓ Installed GLM library"
     fi
     cd ../../../..
+    
+    # Apply compatibility patches for PyTorch 2.4.1
+    chmod +x patch_gaussiandreamerpro.sh
+    ./patch_gaussiandreamerpro.sh
 else
     echo "✓ GaussianDreamerPro already exists"
 fi
 echo ""
 
 #=============================================================================
-# 2. Install Python Dependencies
+# 3. Install Python Dependencies
 #=============================================================================
-echo "Step 2: Installing Python dependencies"
+echo "Step 3: Installing Python dependencies"
 
 if [ -f "requirements-gaussiandreamerpro.txt" ]; then
     pip install -r requirements-gaussiandreamerpro.txt
@@ -76,9 +88,9 @@ fi
 echo ""
 
 #=============================================================================
-# 3. Install PyTorch3D
+# 4. Install PyTorch3D
 #=============================================================================
-echo "Step 3: Installing PyTorch3D"
+echo "Step 4: Installing PyTorch3D"
 
 # For PyTorch 2.0.1 + CUDA 11.8
 pip install iopath fvcore
@@ -89,9 +101,9 @@ echo "✓ PyTorch3D installed"
 echo ""
 
 #=============================================================================
-# 4. Build CUDA Kernels
+# 5. Build CUDA Kernels
 #=============================================================================
-echo "Step 4: Building CUDA kernels"
+echo "Step 5: Building CUDA kernels"
 
 # Set CUDA_HOME if not already set
 export CUDA_HOME=${CUDA_HOME:-/usr/local/cuda}
@@ -122,9 +134,9 @@ cd ..
 echo ""
 
 #=============================================================================
-# 5. Download Shap-E Checkpoint
+# 6. Download Shap-E Checkpoint
 #=============================================================================
-echo "Step 5: Setting up Shap-E checkpoint"
+echo "Step 6: Setting up Shap-E checkpoint"
 
 mkdir -p "$GAUSSIANDREAMERPRO_DIR/load"
 
@@ -158,9 +170,9 @@ fi
 echo ""
 
 #=============================================================================
-# 6. Verify Installation
+# 7. Verify Installation
 #=============================================================================
-echo "Step 6: Verifying installation"
+echo "Step 7: Verifying installation"
 
 python -c "
 import torch
