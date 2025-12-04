@@ -89,11 +89,26 @@ fi
 echo ""
 
 #=============================================================================
-# 3. Install PyTorch 2.0.1 + CUDA 11.8 (Official Version)
+# 3. Install Python Dependencies (WITHOUT PyTorch)
 #=============================================================================
-echo "Step 3: Installing PyTorch 2.0.1 + CUDA 11.8"
+echo "Step 3: Installing Python dependencies (except PyTorch)"
 
-pip install torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cu118
+if [ -f "requirements-gaussiandreamerpro.txt" ]; then
+    # Install dependencies but skip torch-related packages (install them later)
+    grep -v "^torch" requirements-gaussiandreamerpro.txt | pip install -r /dev/stdin
+    echo "✓ Python dependencies installed"
+else
+    echo "❌ requirements-gaussiandreamerpro.txt not found!"
+    exit 1
+fi
+echo ""
+
+#=============================================================================
+# 4. Install PyTorch 2.0.1 + CUDA 11.8 (Official Version - LAST)
+#=============================================================================
+echo "Step 4: Installing PyTorch 2.0.1 + CUDA 11.8 (forcing correct version)"
+
+pip install --force-reinstall torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cu118
 echo "✓ Installed PyTorch 2.0.1 with CUDA 11.8"
 
 python -c "import torch; print(f'  PyTorch: {torch.__version__}')"
@@ -101,28 +116,14 @@ python -c "import torch; print(f'  CUDA available: {torch.cuda.is_available()}')
 echo ""
 
 #=============================================================================
-# 4. Install PyTorch3D (Pre-built Wheels)
+# 5. Install PyTorch3D (Pre-built Wheels)
 #=============================================================================
-echo "Step 4: Installing PyTorch3D from pre-built wheels"
+echo "Step 5: Installing PyTorch3D from pre-built wheels"
 
 conda install -c iopath iopath -y
 conda install -c fvcore -c conda-forge fvcore -y
 pip install --no-index --no-cache-dir pytorch3d -f https://dl.fbaipublicfiles.com/pytorch3d/packaging/wheels/py38_cu118_pyt201/download.html
 echo "✓ Installed PyTorch3D"
-echo ""
-
-#=============================================================================
-# 5. Install Python Dependencies
-#=============================================================================
-echo "Step 5: Installing Python dependencies"
-
-if [ -f "requirements-gaussiandreamerpro.txt" ]; then
-    pip install -r requirements-gaussiandreamerpro.txt
-    echo "✓ Python dependencies installed"
-else
-    echo "❌ requirements-gaussiandreamerpro.txt not found!"
-    exit 1
-fi
 echo ""
 
 #=============================================================================
