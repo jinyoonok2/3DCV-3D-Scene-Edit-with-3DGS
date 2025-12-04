@@ -75,11 +75,13 @@ if [ ! -d "$GAUSSIANDREAMERPRO_DIR" ]; then
     git clone https://github.com/hustvl/GaussianDreamerPro.git
     echo "✓ Cloned GaussianDreamerPro"
     
-    # Initialize submodules (includes GLM library and CUDA kernels)
-    cd "$GAUSSIANDREAMERPRO_DIR"
-    git submodule update --init --recursive
-    cd ..
-    echo "✓ Initialized submodules"
+    # Install GLM library (missing from repository)
+    cd "$GAUSSIANDREAMERPRO_DIR/submodules/diff-gaussian-rasterization/third_party"
+    if [ ! -d "glm" ]; then
+        git clone https://github.com/g-truc/glm.git
+        echo "✓ Installed GLM library"
+    fi
+    cd ../../../..
     
     # Patch CUDA code for PyTorch 2.5+ compatibility
     chmod +x patch_gaussiandreamerpro.sh
