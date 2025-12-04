@@ -20,10 +20,10 @@ for arg in "$@"; do
     esac
 done
 
-echo "=========================================="
+echo "========================================="
 echo "3D SCENE EDIT - OBJECT GENERATION SETUP"
 echo "Phase 2: Object generation with GaussianDreamerPro"
-echo "Following official setup: Python 3.8 + PyTorch 2.0.1 + CUDA 11.8"
+echo "Adapted for VastAI: Python 3.8 + PyTorch 2.4.1 + CUDA 12.1"
 echo "=========================================="
 echo ""
 
@@ -83,6 +83,10 @@ if [ ! -d "$GAUSSIANDREAMERPRO_DIR" ]; then
         echo "✓ Installed GLM library"
     fi
     cd ../../../..
+    
+    # Apply compatibility patches for PyTorch 2.4.1
+    chmod +x patch_gaussiandreamerpro.sh
+    ./patch_gaussiandreamerpro.sh
 else
     echo "✓ GaussianDreamerPro already exists"
 fi
@@ -104,25 +108,26 @@ fi
 echo ""
 
 #=============================================================================
-# 4. Install PyTorch 2.0.1 + CUDA 11.8 (Official Version - LAST)
+# 4. Install PyTorch 2.4.1 + CUDA 12.1 (For CUDA 12.6 compatibility)
 #=============================================================================
-echo "Step 4: Installing PyTorch 2.0.1 + CUDA 11.8 (forcing correct version)"
+echo "Step 4: Installing PyTorch 2.4.1 + CUDA 12.1 (forcing correct version)"
 
-pip install --force-reinstall torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cu118
-echo "✓ Installed PyTorch 2.0.1 with CUDA 11.8"
+pip install --force-reinstall torch==2.4.1 torchvision==0.19.1 --index-url https://download.pytorch.org/whl/cu121
+echo "✓ Installed PyTorch 2.4.1 with CUDA 12.1"
 
 python -c "import torch; print(f'  PyTorch: {torch.__version__}')"
 python -c "import torch; print(f'  CUDA available: {torch.cuda.is_available()}')"
 echo ""
 
 #=============================================================================
-# 5. Install PyTorch3D (Pre-built Wheels)
+# 5. Install PyTorch3D (Build from source or conda)
 #=============================================================================
-echo "Step 5: Installing PyTorch3D from pre-built wheels"
+echo "Step 5: Installing PyTorch3D"
 
 conda install -c iopath iopath -y
 conda install -c fvcore -c conda-forge fvcore -y
-pip install --no-index --no-cache-dir pytorch3d -f https://dl.fbaipublicfiles.com/pytorch3d/packaging/wheels/py38_cu118_pyt201/download.html
+# Try conda first (has wheels for various versions), fallback to pip build
+conda install -c pytorch3d pytorch3d -y || pip install pytorch3d
 echo "✓ Installed PyTorch3D"
 echo ""
 
