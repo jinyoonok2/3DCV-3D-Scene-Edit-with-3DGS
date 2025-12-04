@@ -30,24 +30,13 @@ python -c "import torch; print(f'✓ PyTorch: {torch.__version__}')" || {
     echo "This script will install PyTorch 2.4.1+cu121."
 }
 
-python -c "import torch; print(f'✓ CUDA available: {torch.cuda.is_available()}')"
+python -c "import torch; print(f'✓ CUDA available: {torch.cuda.is_available()}')" 
 echo ""
 
 #=============================================================================
-# 1. Install PyTorch 2.4.1 + CUDA 12.1
+# 1. Clone GaussianDreamerPro Repository
 #=============================================================================
-echo "Step 1: Installing PyTorch 2.4.1 + CUDA 12.1"
-
-pip install --force-reinstall torch==2.4.1 torchvision==0.19.1 --index-url https://download.pytorch.org/whl/cu121
-echo "✓ Installed PyTorch 2.4.1"
-echo ""
-
-#=============================================================================
-# 2. Clone GaussianDreamerPro  
-#=============================================================================
-echo "Step 2: Setting up GaussianDreamerPro repository"
-
-# Handle reset
+echo "Step 1: Setting up GaussianDreamerPro repository"# Handle reset
 if [ "$RESET" = true ]; then
     rm -rf "$GAUSSIANDREAMERPRO_DIR"
     echo "  Removed existing repository"
@@ -74,12 +63,25 @@ fi
 echo ""
 
 #=============================================================================
-# 3. Install Python Dependencies
+# 2. Install PyTorch 2.4.1 + CUDA 12.1 (before dependencies)
+#=============================================================================
+echo "Step 2: Installing PyTorch 2.4.1 + CUDA 12.1"
+
+pip install --force-reinstall torch==2.4.1 torchvision==0.19.1 --index-url https://download.pytorch.org/whl/cu121
+echo "✓ Installed PyTorch 2.4.1"
+
+python -c "import torch; print(f'  PyTorch: {torch.__version__}')"
+python -c "import torch; print(f'  CUDA: {torch.version.cuda}')"
+echo ""
+
+#=============================================================================
+# 3. Install Python Dependencies (after PyTorch to prevent upgrades)
 #=============================================================================
 echo "Step 3: Installing Python dependencies"
 
 if [ -f "requirements-gaussiandreamerpro.txt" ]; then
-    pip install -r requirements-gaussiandreamerpro.txt
+    # Install dependencies but skip torch packages (already installed)
+    grep -v "^torch" requirements-gaussiandreamerpro.txt | pip install -r /dev/stdin
     echo "✓ Python dependencies installed"
 else
     echo "❌ requirements-gaussiandreamerpro.txt not found!"
@@ -88,14 +90,12 @@ fi
 echo ""
 
 #=============================================================================
-# 4. Install PyTorch3D
+# 4. Install PyTorch3D (build from source - no wheels for Python 3.12)
 #=============================================================================
-echo "Step 4: Installing PyTorch3D"
+echo "Step 4: Installing PyTorch3D (this may take a few minutes)"
 
-# For PyTorch 2.0.1 + CUDA 11.8
 pip install iopath fvcore
-pip install --no-index --no-cache-dir pytorch3d -f https://dl.fbaipublicfiles.com/pytorch3d/packaging/wheels/py310_cu118_pyt201/download.html || \
-pip install pytorch3d  # Fallback to build from source
+pip install pytorch3d  # Build from source
 
 echo "✓ PyTorch3D installed"
 echo ""

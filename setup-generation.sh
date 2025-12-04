@@ -62,12 +62,13 @@ fi
 echo ""
 
 #=============================================================================
-# 2. Install Python Dependencies
+# 2. Install Python Dependencies (excluding PyTorch)
 #=============================================================================
 echo "Step 2: Installing Python dependencies"
 
 if [ -f "requirements-gaussiandreamerpro.txt" ]; then
-    pip install -r requirements-gaussiandreamerpro.txt
+    # Install dependencies but skip torch packages (install them next)
+    grep -v "^torch" requirements-gaussiandreamerpro.txt | pip install -r /dev/stdin
     echo "✓ Python dependencies installed"
 else
     echo "❌ requirements-gaussiandreamerpro.txt not found!"
@@ -76,9 +77,21 @@ fi
 echo ""
 
 #=============================================================================
-# 3. Install PyTorch3D
+# 3. Force PyTorch 2.0.1 + CUDA 11.8 (prevent dependency upgrades)
 #=============================================================================
-echo "Step 3: Installing PyTorch3D"
+echo "Step 3: Forcing PyTorch 2.0.1 + CUDA 11.8"
+
+pip install --force-reinstall torch==2.0.1 torchvision==0.15.2 --index-url https://download.pytorch.org/whl/cu118
+echo "✓ Forced PyTorch 2.0.1"
+
+python -c "import torch; print(f'  PyTorch: {torch.__version__}')"
+python -c "import torch; print(f'  CUDA: {torch.version.cuda}')"
+echo ""
+
+#=============================================================================
+# 4. Install PyTorch3D
+#=============================================================================
+echo "Step 4: Installing PyTorch3D"
 
 # For PyTorch 2.0.1 + CUDA 11.8
 pip install iopath fvcore
@@ -89,9 +102,9 @@ echo "✓ PyTorch3D installed"
 echo ""
 
 #=============================================================================
-# 4. Build CUDA Kernels
+# 5. Build CUDA Kernels
 #=============================================================================
-echo "Step 4: Building CUDA kernels"
+echo "Step 5: Building CUDA kernels"
 
 # Set CUDA_HOME if not already set
 export CUDA_HOME=${CUDA_HOME:-/usr/local/cuda}
@@ -122,9 +135,9 @@ cd ..
 echo ""
 
 #=============================================================================
-# 5. Download Shap-E Checkpoint
+# 6. Download Shap-E Checkpoint
 #=============================================================================
-echo "Step 5: Setting up Shap-E checkpoint"
+echo "Step 6: Setting up Shap-E checkpoint"
 
 mkdir -p "$GAUSSIANDREAMERPRO_DIR/load"
 
@@ -158,9 +171,9 @@ fi
 echo ""
 
 #=============================================================================
-# 6. Verify Installation
+# 7. Verify Installation
 #=============================================================================
-echo "Step 6: Verifying installation"
+echo "Step 7: Verifying installation"
 
 python -c "
 import torch
