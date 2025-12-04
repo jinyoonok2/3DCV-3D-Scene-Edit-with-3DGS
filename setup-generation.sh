@@ -132,9 +132,17 @@ echo "✓ Installed PyTorch3D"
 echo ""
 
 #=============================================================================
-# 6. Build CUDA Kernels (No Patches Needed)
+# 6. Build CUDA Kernels
 #=============================================================================
 echo "Step 6: Building CUDA kernels"
+
+# Set CUDA_HOME for compilation
+export CUDA_HOME=/usr/local/cuda
+export PATH=$CUDA_HOME/bin:$PATH
+export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
+
+echo "  CUDA_HOME: $CUDA_HOME"
+nvcc --version | head -1
 
 cd "$GAUSSIANDREAMERPRO_DIR"
 
