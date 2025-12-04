@@ -82,6 +82,7 @@ if [ ! -d "$GAUSSIANDREAMERPRO_DIR" ]; then
     echo "✓ Initialized submodules"
     
     # Patch CUDA code for PyTorch 2.5+ compatibility
+    chmod +x patch_gaussiandreamerpro.sh
     ./patch_gaussiandreamerpro.sh
 else
     echo "✓ GaussianDreamerPro already exists"
