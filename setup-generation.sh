@@ -80,6 +80,9 @@ if [ ! -d "$GAUSSIANDREAMERPRO_DIR" ]; then
     git submodule update --init --recursive
     cd ..
     echo "✓ Initialized submodules"
+    
+    # Patch CUDA code for PyTorch 2.5+ compatibility
+    ./patch_gaussiandreamerpro.sh
 else
     echo "✓ GaussianDreamerPro already exists"
 fi
