@@ -41,11 +41,10 @@ fi
 echo ""
 
 #=============================================================================
-# 2. Install PyTorch 2.0.1 with CUDA 11.8
+# 2. Check PyTorch (already installed in venv-generation)
 #=============================================================================
-echo "Step 2: Installing PyTorch 2.0.1 with CUDA 11.8"
-pip install torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cu118
-echo "✓ PyTorch installed"
+echo "Step 2: Checking PyTorch installation"
+python -c "import torch; print(f'✓ PyTorch {torch.__version__} already installed')"
 echo ""
 
 #=============================================================================
@@ -55,11 +54,11 @@ echo "Step 3: Installing PyTorch3D"
 # Install dependencies for pytorch3d
 pip install iopath fvcore
 
-# Install pytorch3d from pre-built wheel
-pip install --no-index --no-cache-dir pytorch3d -f https://dl.fbaipublicfiles.com/pytorch3d/packaging/wheels/py312_cu118_pyt201/download.html || \
-pip install pytorch3d  # Fallback to pip if wheel not available
+# Install pytorch3d (compatible with PyTorch 2.5.1)
+# Try from conda-forge or build from source
+pip install pytorch3d || echo "⚠️  PyTorch3D install may require building from source"
 
-echo "✓ PyTorch3D installed"
+echo "✓ PyTorch3D installation attempted"
 echo ""
 
 #=============================================================================

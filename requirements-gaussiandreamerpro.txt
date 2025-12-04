@@ -2,9 +2,9 @@
 # Two-stage text-to-3D generation with mesh-bound Gaussians
 # Based on: https://github.com/hustvl/GaussianDreamerPro
 
-# Core dependencies (will be installed via conda/pip in setup script)
-# torch==2.0.1 with CUDA 11.8
-# pytorch3d (from wheels)
+# Core dependencies (installed separately in setup script)
+# PyTorch 2.5.1 with CUDA 12.1 (already in venv-generation)
+# pytorch3d (from pip or conda-forge)
 
 # Python packages
 omegaconf
