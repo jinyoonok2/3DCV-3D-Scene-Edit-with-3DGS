@@ -23,7 +23,6 @@ envs/
 # Data and external dependencies
 datasets/
 GroundingDINO/
-GaussianDreamer/
 GaussianDreamerPro/
 sam2/
 gsplat-src/

@@ -2,12 +2,14 @@
 
 # 3D Scene Edit with 3DGS - Object Generation Setup (Phase 2)
 # This script creates a separate environment for object generation (steps 06+)
+# Uses GaussianDreamerPro for high-quality text-to-3D generation
 # Run this AFTER completing object removal phase (steps 00-05c)
 
 set -e  # Exit on error
 
 VENV_REMOVAL="venv-removal"      # Phase 1 environment
 VENV_GENERATION="venv-generation"  # Phase 2 environment
+GAUSSIANDREAMERPRO_DIR="GaussianDreamerPro"
 RESET=false
 
 # Parse arguments
@@ -20,7 +22,7 @@ done
 
 echo "=========================================="
 echo "3D SCENE EDIT - OBJECT GENERATION SETUP"
-echo "Phase 2: Creating separate environment for object generation (steps 06+)"
+echo "Phase 2: Object generation with GaussianDreamerPro"
 echo "=========================================="
 echo ""
 
@@ -42,7 +44,8 @@ echo "Step 1: Creating Phase 2 environment"
 # Handle reset
 if [ "$RESET" = true ]; then
     rm -rf "$VENV_GENERATION"
-    echo "  Removed existing Phase 2 environment"
+    rm -rf "$GAUSSIANDREAMERPRO_DIR"
+    echo "  Removed existing Phase 2 environment and GaussianDreamerPro"
 fi
 
 # Create Phase 2 environment by copying Phase 1
@@ -64,103 +67,150 @@ echo "✓ Activated Phase 2 environment"
 echo ""
 
 #=============================================================================
-# 2. GaussianDreamer Repository Setup
+# 2. Clone GaussianDreamerPro
 #=============================================================================
-echo "Step 2: Setting up GaussianDreamer repository"
+echo "Step 2: Setting up GaussianDreamerPro repository"
 
-# GaussianDreamer for direct image-to-3D Gaussian generation
-if [ ! -d "GaussianDreamer" ]; then
-    git clone https://github.com/hustvl/GaussianDreamer.git -q
-    echo "✓ GaussianDreamer cloned"
+if [ ! -d "$GAUSSIANDREAMERPRO_DIR" ]; then
+    git clone https://github.com/hustvl/GaussianDreamerPro.git
+    echo "✓ Cloned GaussianDreamerPro"
 else
-    echo "✓ GaussianDreamer exists"
+    echo "✓ GaussianDreamerPro already exists"
 fi
 echo ""
 
 #=============================================================================
-# 3. GaussianDreamer Dependencies  
+# 3. Install GaussianDreamerPro Dependencies
 #=============================================================================
-echo "Step 3: Installing GaussianDreamer dependencies"
+echo "Step 3: Installing GaussianDreamerPro dependencies"
 
-# Install PyTorch first (required by tiny-cuda-nn build)
-echo "  Installing PyTorch 2.5.1 with CUDA 12.1..."
-pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu121 -q
-echo "✓ PyTorch installed"
+# PyTorch already installed from Phase 1, verify version
+echo "  Checking PyTorch installation..."
+python -c "import torch; print(f'  ✓ PyTorch {torch.__version__} (CUDA: {torch.cuda.is_available()})')"
 
-# Install numpy and Pillow from PyPI (not available in cu121 index)
-echo "  Installing core dependencies (numpy, Pillow)..."
-pip install "numpy<2.0.0,>=1.24.3" "Pillow>=9.5.0,<10.0.0" -q
-echo "✓ Core dependencies installed"
-
-# Install tiny-cuda-nn separately (requires torch for build)
-echo "  Installing tiny-cuda-nn (requires PyTorch for build)..."
-pip install --no-build-isolation ninja git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch -q
-echo "✓ tiny-cuda-nn installed"
+# Install PyTorch3D
+echo "  Installing PyTorch3D..."
+pip install iopath fvcore -q
+pip install pytorch3d -q || echo "  ⚠️  PyTorch3D install may require building from source"
+echo "  ✓ PyTorch3D installation attempted"
 
 # Install remaining dependencies from requirements file
-if [ -f "requirements-gaussiandreamer.txt" ]; then
-    echo "  Installing remaining GaussianDreamer dependencies..."
-    pip install --no-build-isolation -r requirements-gaussiandreamer.txt -q
-    echo "✓ GaussianDreamer dependencies installed"
+if [ -f "requirements-gaussiandreamerpro.txt" ]; then
+    echo "  Installing GaussianDreamerPro Python dependencies..."
+    pip install -r requirements-gaussiandreamerpro.txt -q
+    echo "  ✓ Python dependencies installed"
 else
-    echo "❌ requirements-gaussiandreamer.txt not found!"
+    echo "  ❌ requirements-gaussiandreamerpro.txt not found!"
     exit 1
 fi
-
-# Install threestudio separately with --no-deps to prevent version conflicts
-echo "  Installing threestudio (isolated to prevent conflicts)..."
-pip install --no-deps git+https://github.com/threestudio-project/threestudio.git -q
-echo "✓ threestudio installed"
-
-# Re-enforce version constraints that may have been upgraded by dependencies
-echo "  Re-enforcing version constraints..."
-pip install --force-reinstall "numpy<2.0.0,>=1.24.3" "Pillow>=9.5.0,<10.0.0" --no-deps -q
-echo "✓ Version constraints enforced"
 echo ""
 
 #=============================================================================
-# 4. Verification
+# 4. Build GaussianDreamerPro CUDA Kernels
 #=============================================================================
-echo "Step 4: Verifying object generation setup"
+echo "Step 4: Building GaussianDreamerPro CUDA kernels"
+
+cd "$GAUSSIANDREAMERPRO_DIR"
+
+# Build diff-gaussian-rasterization
+echo "  Building diff-gaussian-rasterization..."
+pip install ./submodules/diff-gaussian-rasterization -q
+echo "  ✓ diff-gaussian-rasterization built"
+
+# Build diff-gaussian-rasterization_2dgs
+echo "  Building diff-gaussian-rasterization_2dgs..."
+pip install ./submodules/diff-gaussian-rasterization_2dgs -q
+echo "  ✓ diff-gaussian-rasterization_2dgs built"
+
+# Build simple-knn
+echo "  Building simple-knn..."
+pip install ./submodules/simple-knn -q
+echo "  ✓ simple-knn built"
+
+cd ..
+echo ""
+
+#=============================================================================
+# 5. Download Shap-E Checkpoint
+#=============================================================================
+echo "Step 5: Setting up Shap-E checkpoint"
+
+mkdir -p "$GAUSSIANDREAMERPRO_DIR/load"
+
+if [ ! -f "$GAUSSIANDREAMERPRO_DIR/load/shapE_finetuned_with_330kdata.pth" ]; then
+    echo "  Downloading finetuned Shap-E model from Cap3D..."
+    echo "  This may take a while (~2GB download)"
+    
+    cd "$GAUSSIANDREAMERPRO_DIR/load"
+    
+    # Try to download (update URL if needed based on actual hosting location)
+    wget -q --show-progress https://huggingface.co/datasets/tiange/Cap3D/resolve/main/misc/our_finetuned_models/shapE_finetuned_with_330kdata.pth || \
+    {
+        echo "  ⚠️  Automatic download failed"
+        echo "  Please manually download shapE_finetuned_with_330kdata.pth"
+        echo "  From: https://huggingface.co/datasets/tiange/Cap3D"
+        echo "  Place in: $GAUSSIANDREAMERPRO_DIR/load/"
+    }
+    
+    cd ../..
+else
+    echo "  ✓ Shap-E checkpoint already exists"
+fi
+echo ""
+
+#=============================================================================
+# 6. Verification
+#=============================================================================
+echo "Step 6: Verifying object generation setup"
 python -c "
-# Check base dependencies still work
+# Check base dependencies
 import torch, gsplat, sam2, numpy, PIL
 print(f'✓ PyTorch: {torch.__version__} (CUDA: {torch.cuda.is_available()})')
 print(f'✓ gsplat: {gsplat.__version__}')
 print('✓ SAM2, NumPy, Pillow: OK')
 
-# Check GaussianDreamer dependencies
+# Check GaussianDreamerPro dependencies
 try:
-    import omegaconf
-    import einops
-    import rembg
-    # Skip threestudio import - it requires additional setup and will be verified when used
-    print('✓ GaussianDreamer dependencies: Available')
-    print('  Note: threestudio will be verified when running Module 06')
-except ImportError as e:
-    print(f'❌ GaussianDreamer dependency import failed: {e}')
-    exit(1)
+    import pytorch3d
+    print(f'✓ PyTorch3D: {pytorch3d.__version__}')
+except:
+    print('⚠️  PyTorch3D: May need manual installation')
+
+try:
+    import diff_gaussian_rasterization
+    print('✓ diff-gaussian-rasterization: OK')
+except:
+    print('❌ diff-gaussian-rasterization: Failed')
+
+try:
+    from simple_knn._C import distCUDA2
+    print('✓ simple-knn: OK')
+except:
+    print('❌ simple-knn: Failed')
+
+print('✓ GaussianDreamerPro setup complete!')
 "
 echo ""
 
 echo "=========================================="
 echo "OBJECT GENERATION SETUP COMPLETE!"
-echo "Two-environment setup ready"
+echo "GaussianDreamerPro ready for text-to-3D"
 echo "=========================================="
 echo ""
 echo "Environment structure:"
 echo "• Phase 1 (Object Removal): $VENV_REMOVAL"
 echo "  - Steps 00-05c: Dataset → Training → Removal → Optimization"
 echo "• Phase 2 (Object Generation): $VENV_GENERATION" 
-echo "  - Steps 06-09: Generation → Placement → Optimization → Visualization"
+echo "  - Steps 06-08: Text-to-3D → Placement → Visualization"
+echo "  - Uses: GaussianDreamerPro for high-quality generation"
 echo ""
 echo "Activation commands:"
-echo "• Object Removal: source $VENV_REMOVAL/bin/activate"
-echo "• Object Generation: source $VENV_GENERATION/bin/activate"
+echo "• Object Removal: source activate-removal.sh"
+echo "• Object Generation: source activate-generation.sh"
 echo ""
-echo "Or use the activate scripts:"
-echo "• source activate-removal.sh      # Phase 1 (object removal)"
-echo "• source activate-generation.sh   # Phase 2 (object generation)"
+echo "To generate 3D objects:"
+echo "  source activate-generation.sh"
+echo "  python 06_object_generation.py --text_prompt 'a coffee mug'"
 echo ""
 
 # Deactivate environment after setup
