@@ -148,17 +148,17 @@ cd "$GAUSSIANDREAMERPRO_DIR"
 
 # Build diff-gaussian-rasterization
 echo "  Building diff-gaussian-rasterization..."
-pip install ./submodules/diff-gaussian-rasterization
+CUDA_HOME=/usr/local/cuda pip install ./submodules/diff-gaussian-rasterization
 echo "  ✓ diff-gaussian-rasterization built"
 
 # Build diff-gaussian-rasterization_2dgs
 echo "  Building diff-gaussian-rasterization_2dgs..."
-pip install ./submodules/diff-gaussian-rasterization_2dgs
+CUDA_HOME=/usr/local/cuda pip install ./submodules/diff-gaussian-rasterization_2dgs
 echo "  ✓ diff-gaussian-rasterization_2dgs built"
 
 # Build simple-knn
 echo "  Building simple-knn..."
-pip install ./submodules/simple-knn
+CUDA_HOME=/usr/local/cuda pip install ./submodules/simple-knn
 echo "  ✓ simple-knn built"
 
 cd ..
