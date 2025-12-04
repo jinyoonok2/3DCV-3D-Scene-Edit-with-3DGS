@@ -13,6 +13,7 @@ trimesh
 pyglet<2
 open3d
 plyfile
+point-e
 scikit-image
 opencv-python
 diffusers
@@ -24,6 +25,7 @@ imageio-ffmpeg
 lpips
 
 # Shap-E dependencies
+numpy<2.0.0
 matplotlib
 Pillow
 tqdm
