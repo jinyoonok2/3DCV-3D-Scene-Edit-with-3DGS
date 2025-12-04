@@ -1,42 +1,28 @@
 #!/bin/bash
-# Activate the virtual environment for Object Generation Phase (Steps 06-09)
-#
-# Usage:
-#   source activate-generation.sh
 
-VENV_PATH="./venv-generation"
+# Activate conda environment for GaussianDreamerPro (Python 3.8 + PyTorch 2.0.1)
+# This environment is separate from Phase 1 (venv-removal)
 
-# Check if virtual environment exists
-if [ ! -d "$VENV_PATH" ]; then
-    echo "❌ Virtual environment not found: $VENV_PATH"
-    echo ""
-    echo "Please run setup first:"
-    echo "  ./setup-generation.sh"
+# Check if conda is available
+if ! command -v conda &> /dev/null; then
+    echo "❌ Error: conda not found!"
+    echo "Please install Miniconda or Anaconda first."
     return 1 2>/dev/null || exit 1
 fi
 
-# Check if activate script exists
-if [ ! -f "$VENV_PATH/bin/activate" ]; then
-    echo "❌ Virtual environment activate script not found: $VENV_PATH/bin/activate"
-    echo ""
-    echo "Please run setup first:"
-    echo "  ./setup-generation.sh"
-    return 1 2>/dev/null || exit 1
-fi
+# Initialize conda for current shell
+eval "$(conda shell.bash hook)"
 
-# Activate virtual environment
-source "$VENV_PATH/bin/activate"
+# Activate the environment
+conda activate gaussiandreamerpro
 
-echo "✓ Object Generation environment activated: $VENV_PATH"
+echo "✓ Activated GaussianDreamerPro environment (Python 3.8 + PyTorch 2.0.1)"
 echo ""
-echo "Python: $(python --version)"
-echo "Location: $(which python)"
+echo "Available modules:"
+echo "  06 - Object Generation (GaussianDreamerPro text-to-3D)"
+echo "  07 - Object Placement (merge into scene)"
+echo "  08 - Final Visualization (render results)"
 echo ""
-echo "📋 Object Generation Pipeline (Steps 06-08):"
-echo "  06: python 06_object_generation.py"
-echo "  07: python 07_place_object_at_roi.py"
-echo "  08: python 08_final_visualization.py"
+echo "Example usage:"
+echo "  python 06_object_generation.py"
 echo ""
-echo "💡 Prerequisites: Complete Object Removal phase (steps 00-05c) first"
-echo ""
-echo "To deactivate, run: deactivate"
