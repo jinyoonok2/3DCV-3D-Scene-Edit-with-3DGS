@@ -1,22 +1,10 @@
 #!/bin/bash
 
-# Activate conda environment for GaussianDreamerPro (Python 3.8 + PyTorch 2.0.1)
-# This environment is separate from Phase 1 (venv-removal)
+# Activate GaussianDreamerPro environment
+# Uses system Python (no conda/venv needed for VastAI templates)
 
-# Check if conda is available
-if ! command -v conda &> /dev/null; then
-    echo "❌ Error: conda not found!"
-    echo "Please install Miniconda or Anaconda first."
-    return 1 2>/dev/null || exit 1
-fi
-
-# Initialize conda for current shell
-eval "$(conda shell.bash hook)"
-
-# Activate the environment
-conda activate gaussiandreamerpro
-
-echo "✓ Activated GaussianDreamerPro environment (Python 3.8 + PyTorch 2.0.1)"
+echo "✓ Using system Python for GaussianDreamerPro"
+python -c "import torch; print(f'  PyTorch: {torch.__version__}')" 2>/dev/null || echo "  (PyTorch not installed yet - run setup-generation.sh first)"
 echo ""
 echo "Available modules:"
 echo "  06 - Object Generation (GaussianDreamerPro text-to-3D)"
