@@ -114,17 +114,17 @@ cd "$GAUSSIANDREAMERPRO_DIR"
 
 # Build diff-gaussian-rasterization
 echo "  Building diff-gaussian-rasterization..."
-pip install ./submodules/diff-gaussian-rasterization -q
+pip install --no-build-isolation ./submodules/diff-gaussian-rasterization -q
 echo "  ✓ diff-gaussian-rasterization built"
 
 # Build diff-gaussian-rasterization_2dgs
 echo "  Building diff-gaussian-rasterization_2dgs..."
-pip install ./submodules/diff-gaussian-rasterization_2dgs -q
+pip install --no-build-isolation ./submodules/diff-gaussian-rasterization_2dgs -q
 echo "  ✓ diff-gaussian-rasterization_2dgs built"
 
 # Build simple-knn
 echo "  Building simple-knn..."
-pip install ./submodules/simple-knn -q
+pip install --no-build-isolation ./submodules/simple-knn -q
 echo "  ✓ simple-knn built"
 
 cd ..
