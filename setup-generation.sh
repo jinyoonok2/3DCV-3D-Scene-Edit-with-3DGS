@@ -74,6 +74,12 @@ echo "Step 2: Setting up GaussianDreamerPro repository"
 if [ ! -d "$GAUSSIANDREAMERPRO_DIR" ]; then
     git clone https://github.com/hustvl/GaussianDreamerPro.git
     echo "✓ Cloned GaussianDreamerPro"
+    
+    # Initialize submodules (includes GLM library and CUDA kernels)
+    cd "$GAUSSIANDREAMERPRO_DIR"
+    git submodule update --init --recursive
+    cd ..
+    echo "✓ Initialized submodules"
 else
     echo "✓ GaussianDreamerPro already exists"
 fi
