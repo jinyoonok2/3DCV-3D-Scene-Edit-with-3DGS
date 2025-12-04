@@ -31,6 +31,7 @@ fire
 humanize
 requests
 filelock
+rich
 
 # For background removal (optional)
 rembg[gpu]==2.0.59
