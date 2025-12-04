@@ -13,7 +13,7 @@ trimesh
 pyglet<2
 open3d
 plyfile
-point-e
+git+https://github.com/openai/point-e.git
 scikit-image
 opencv-python
 diffusers
