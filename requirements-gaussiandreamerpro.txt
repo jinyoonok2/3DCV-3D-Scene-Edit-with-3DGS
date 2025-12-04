@@ -14,6 +14,7 @@ pyglet<2
 open3d
 plyfile
 git+https://github.com/openai/point-e.git
+git+https://github.com/openai/shap-e.git
 scikit-image
 opencv-python
 diffusers
