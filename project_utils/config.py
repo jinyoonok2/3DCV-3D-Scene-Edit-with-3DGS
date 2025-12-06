@@ -63,9 +63,8 @@ class ProjectConfig:
         # Create replacement pipeline dirs if enabled
         if self.config.get('replacement', {}).get('enabled', False):
             dirs_to_create.extend([
-                self.get_path('object_generation'),
                 self.get_path('scene_placement'),
-                self.get_path('final_optimization'),
+                self.get_path('final_visualization'),
             ])
         
         for dir_path in dirs_to_create:
@@ -238,9 +237,8 @@ class ProjectConfig:
             '05a_remove_and_render_holes': 'inpainting',
             '05b_inpaint_holes': 'inpainting',
             '05c_optimize_to_targets': 'inpainting',
-            '06_object_generation': 'object_generation',
-            '07_place_object_at_roi': 'scene_placement',
-            '08_final_optimization': 'final_optimization',
+            '06_place_object_at_roi': 'scene_placement',
+            '07_final_visualization': 'final_visualization',
         }
         
         path_key = module_mapping.get(module_name)
