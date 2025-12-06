@@ -464,7 +464,6 @@ def main():
         },
         "parameters": {
             "scale": scale,
-            "placement": args.placement,
             "xyz_offset": xyz_offset,
             "rotation_degrees": args.rotation_degrees,
         },
