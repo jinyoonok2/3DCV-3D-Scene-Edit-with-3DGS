@@ -42,7 +42,7 @@ from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 sys.path.insert(0, str(Path(__file__).parent / "gsplat-src" / "examples"))
 
 from datasets.colmap import Dataset, Parser
-from fused_ssim import fused_ssim
+from torchmetrics.functional import structural_similarity_index_measure
 from utils import knn, rgb_to_sh, set_random_seed
 
 from gsplat import export_splats
@@ -309,8 +309,8 @@ def train(iters, sh_degree, splats, optimizers, trainloader, parser_obj, device,
         
         # Loss
         l1loss = F.l1_loss(colors, pixels)
-        ssimloss = 1.0 - fused_ssim(
-            colors.permute(0, 3, 1, 2), pixels.permute(0, 3, 1, 2), padding="valid"
+        ssimloss = 1.0 - structural_similarity_index_measure(
+            colors.permute(0, 3, 1, 2), pixels.permute(0, 3, 1, 2), data_range=1.0
         )
         loss = l1loss * (1.0 - ssim_lambda) + ssimloss * ssim_lambda
         
