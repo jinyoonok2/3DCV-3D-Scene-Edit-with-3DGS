@@ -20,6 +20,7 @@ ENV/
 datasets/
 GroundingDINO/
 GaussianDreamerResults/
+GaussianDreamerPro/
 sam2/
 gsplat-src/
 TripoSR/
