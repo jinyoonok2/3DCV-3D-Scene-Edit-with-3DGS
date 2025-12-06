@@ -108,7 +108,7 @@ replacement:
     alignment_method: "depth"              # depth, manual, or auto
     scale: 0.05                             # Manual uniform scale multiplier
     placement: "center"                    # center, bottom, or top
-    xyz_offset: [-0.1, -0.05, 0.05]           # XYZ offset in meters [x, y, z]
+    xyz_offset: [-0.125, -0.05, 0.05]           # XYZ offset in meters [x, y, z]
     rotation_degrees: 0.0                  # Rotation around Z-axis in degrees
     output_merged: "outputs/${project.name}/06_object_placement/merged_gaussians.pt"
       
