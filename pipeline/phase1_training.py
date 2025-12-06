@@ -132,17 +132,36 @@ class Phase1Training(BasePhase):
         
         # Training loop
         console.print(f"[bold cyan]Training for {self.iterations} iterations...[/bold cyan]")
+        
+        # Create dataloader
+        trainloader = torch.utils.data.DataLoader(
+            trainset,
+            batch_size=1,
+            shuffle=True,
+            num_workers=4,
+            persistent_workers=True,
+            pin_memory=True,
+        )
+        
         strategy = DefaultStrategy()
+        strategy_state = strategy.initialize_state()
         psnr_metric = PeakSignalNoiseRatio(data_range=1.0).to(device)
         
+        trainloader_iter = iter(trainloader)
         pbar = tqdm(range(self.iterations), desc="Training")
+        
         for step in pbar:
-            # Sample random image
-            idx = np.random.randint(len(trainset))
-            data = trainset[idx]
-            camtoworlds = torch.from_numpy(data["camtoworld"]).float().to(device)
-            Ks = torch.from_numpy(data["K"]).float().to(device)
-            pixels = torch.from_numpy(data["image"]).float().to(device) / 255.0
+            # Get next batch
+            try:
+                data = next(trainloader_iter)
+            except StopIteration:
+                trainloader_iter = iter(trainloader)
+                data = next(trainloader_iter)
+            
+            camtoworlds = data["camtoworld"].to(device)  # [1, 4, 4]
+            Ks = data["K"].to(device)  # [1, 3, 3]
+            pixels = data["image"].to(device) / 255.0  # [1, H, W, 3]
+            height, width = pixels.shape[1:3]
             
             # Render
             renders, alphas, info = rasterization(
@@ -151,15 +170,15 @@ class Phase1Training(BasePhase):
                 scales=torch.exp(scales),
                 opacities=torch.sigmoid(opacities),
                 colors=sh_coeffs,
-                viewmats=torch.linalg.inv(camtoworlds)[None],
-                Ks=Ks[None],
-                width=pixels.shape[1],
-                height=pixels.shape[0],
+                viewmats=torch.linalg.inv(camtoworlds),
+                Ks=Ks,
+                width=width,
+                height=height,
                 sh_degree=self.sh_degree,
             )
             
             # Loss
-            loss = torch.nn.functional.l1_loss(renders[0].permute(1, 2, 0), pixels)
+            loss = torch.nn.functional.l1_loss(renders.permute(0, 3, 1, 2), pixels.permute(0, 3, 1, 2))
             
             # Backward
             for opt in optimizers:
@@ -170,7 +189,7 @@ class Phase1Training(BasePhase):
             
             # Update progress
             if step % 100 == 0:
-                psnr = psnr_metric(renders[0].permute(1, 2, 0), pixels)
+                psnr = psnr_metric(renders.permute(0, 3, 1, 2), pixels.permute(0, 3, 1, 2))
                 pbar.set_postfix({"loss": f"{loss.item():.4f}", "psnr": f"{psnr.item():.2f}"})
             
             # Densification
@@ -178,9 +197,10 @@ class Phase1Training(BasePhase):
                 strategy.step_post_backward(
                     params={"means": means, "scales": scales, "quats": quats, "opacities": opacities, "sh0": sh_coeffs[:, 0, :], "shN": sh_coeffs[:, 1:, :]},
                     optimizers=dict(zip(["means", "scales", "quats", "opacities", "sh0", "shN"], optimizers)),
-                    state=strategy.state,
+                    state=strategy_state,
                     step=step,
                     info=info,
+                    packed=False,
                 )
         
         console.print("\n✓ Training completed\n")
