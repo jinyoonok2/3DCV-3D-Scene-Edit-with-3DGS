@@ -75,7 +75,7 @@ class Phase1Training(BasePhase):
         from rich.console import Console
         import torch
         import numpy as np
-        from datasets.colmap import Dataset
+        from datasets.colmap import Dataset, Parser
         from utils import set_random_seed, rgb_to_sh, knn
         from gsplat.rendering import rasterization
         from gsplat.strategy import DefaultStrategy
@@ -90,24 +90,33 @@ class Phase1Training(BasePhase):
         set_random_seed(self.seed)
         
         console.print(f"[bold cyan]Loading dataset:[/bold cyan] {self.dataset_root}")
-        trainset = Dataset(
-            self.dataset_root,
-            split="train",
-            patch_size=None,
-            load_depths=False,
+        
+        # Load COLMAP data using Parser (like the old code does)
+        parser_obj = Parser(
+            data_dir=str(self.dataset_root),
             factor=self.factor,
+            normalize=True,
+            test_every=self.test_every,
         )
+        
+        # Create dataset from parser
+        trainset = Dataset(parser_obj, split="train")
         
         console.print(f"✓ Loaded {len(trainset)} training images\n")
         
-        # Initialize Gaussians
+        # Initialize Gaussians from COLMAP points
         console.print("[bold cyan]Initializing 3D Gaussians...[/bold cyan]")
-        points = torch.from_numpy(trainset.points).float()
-        rgbs = torch.from_numpy(trainset.points_rgb / 255.0).float()
+        points = torch.from_numpy(parser_obj.points).float()
+        rgbs = torch.from_numpy(parser_obj.points_rgb / 255.0).float()
+        
+        # Initialize the GS size to be the average dist of the 3 nearest neighbors
+        dist2_avg = (knn(points, 4)[:, 1:] ** 2).mean(dim=-1)
+        dist_avg = torch.sqrt(dist2_avg)
+        scales = torch.log(dist_avg * 0.01).unsqueeze(-1).repeat(1, 3)
         
         N = points.shape[0]
         means = torch.nn.Parameter(points.to(device))
-        scales = torch.nn.Parameter(torch.log(torch.ones(N, 3, device=device) * 0.01))
+        scales = torch.nn.Parameter(scales.to(device))
         quats = torch.nn.Parameter(torch.rand(N, 4, device=device))
         opacities = torch.nn.Parameter(torch.logit(torch.full((N,), 0.1, device=device)))
         
