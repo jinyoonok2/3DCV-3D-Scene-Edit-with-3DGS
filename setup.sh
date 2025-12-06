@@ -55,6 +55,18 @@ fi
 
 # Activate virtual environment
 source "$VENV_NAME/bin/activate"
+
+# Check Python version and warn if using 3.12+
+PY_MAJOR=$(python -c "import sys; print(sys.version_info.major)")
+PY_MINOR=$(python -c "import sys; print(sys.version_info.minor)")
+if [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -ge 12 ]; then
+    echo "  ⚠ Using Python 3.$PY_MINOR - some packages may need system dependencies"
+    echo "  Installing system libraries for Pillow..."
+    if command -v apt-get &> /dev/null; then
+        apt-get update -qq && apt-get install -y -qq libjpeg-dev zlib1g-dev || echo "  Note: Install system packages manually if needed"
+    fi
+fi
+
 echo "✓ Activated virtual environment"
 echo ""
 

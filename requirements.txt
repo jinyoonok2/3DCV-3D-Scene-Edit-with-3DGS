@@ -3,7 +3,7 @@
 
 # Core scientific computing
 numpy<2.0.0
-pillow<10.0.0
+pillow>=10.0.0  # Use newer version with Python 3.12 wheels
 imageio[ffmpeg]
 tqdm
 opencv-python
