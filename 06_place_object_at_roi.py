@@ -220,7 +220,7 @@ def transform_object_to_roi(object_gaussians, roi_mask, scene_positions, args, c
     # 2. Apply manual scale
     # Get scale from args or config
     if args.scale is None:
-        scale = config.get('placement', {}).get('scale', 0.2)
+        scale = config.config.get('replacement', {}).get('placement', {}).get('scale', 0.2)
         console.print(f"Using scale from config: {scale:.4f}")
     else:
         scale = args.scale
@@ -273,7 +273,7 @@ def transform_object_to_roi(object_gaussians, roi_mask, scene_positions, args, c
     # Apply XYZ offset
     # Get offset from args or config
     if args.xyz_offset is None:
-        xyz_offset = config.get('placement', {}).get('xyz_offset', [0.0, 0.0, 0.0])
+        xyz_offset = config.config.get('replacement', {}).get('placement', {}).get('xyz_offset', [0.0, 0.0, 0.0])
         console.print(f"Using XYZ offset from config: {xyz_offset}")
     else:
         xyz_offset = args.xyz_offset
