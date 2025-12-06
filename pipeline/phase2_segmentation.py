@@ -102,6 +102,11 @@ class Phase2Segmentation(BasePhase):
         
         return True
     
+    def is_complete(self) -> bool:
+        """Check if Phase 2 is already complete."""
+        roi_path = self.phase_dir / "04_roi_extraction" / "roi.pt"
+        return roi_path.exists()
+    
     def execute(self) -> Dict[str, Any]:
         """Execute Phase 2: Segmentation and ROI extraction."""
         from rich.console import Console

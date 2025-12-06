@@ -83,6 +83,19 @@ class Phase1Training(BasePhase):
         
         return True
     
+    def is_complete(self) -> bool:
+        """Check if Phase 1 is already complete."""
+        training_dir = self.phase_dir / "01_initial_training"
+        ckpt_path = training_dir / "ckpt_initial.pt"
+        metrics_path = training_dir / "metrics.json"
+        render_dir = training_dir / "renders"
+        
+        # Check all required outputs exist
+        return (ckpt_path.exists() and 
+                metrics_path.exists() and 
+                render_dir.exists() and 
+                len(list(render_dir.glob("*.png"))) > 0)
+    
     def execute(self) -> Dict[str, Any]:
         """Execute Phase 1: Dataset validation + training."""
         from rich.console import Console
@@ -263,11 +276,18 @@ class Phase1Training(BasePhase):
         torch.save({"step": self.iterations, "splats": splats.state_dict()}, ckpt_path)
         console.print(f"✓ Checkpoint saved: {ckpt_path}\n")
         
+        # Render validation views and compute metrics
+        console.print("[bold cyan]Rendering validation views...[/bold cyan]")
+        metrics_dict = self._render_and_evaluate(splats, parser_obj, device, console)
+        console.print(f"✓ Validation complete: PSNR={metrics_dict['psnr']:.2f}, SSIM={metrics_dict['ssim']:.4f}\n")
+        
         results = {
             "checkpoint": str(ckpt_path),
             "dataset_root": str(self.dataset_root),
             "num_iterations": self.iterations,
             "num_gaussians": len(splats["means"]),
+            "metrics": metrics_dict,
+        }
         }
         
         return results
@@ -316,3 +336,85 @@ class Phase1Training(BasePhase):
             f.write("\n" + "=" * 80 + "\n")
         
         console.print(f"  Summary written to {summary_path.name}")
+    
+    def _render_and_evaluate(self, splats, parser_obj, device, console):
+        """Render validation views and compute metrics like legacy code."""
+        import torch
+        import imageio.v2 as imageio
+        from collections import defaultdict
+        from torchmetrics.image import PeakSignalNoiseRatio, StructuralSimilarityIndexMeasure
+        from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
+        from gsplat.rendering import rasterization
+        from tqdm import tqdm
+        
+        training_dir = self.phase_dir / "01_initial_training"
+        render_dir = training_dir / "renders"
+        render_dir.mkdir(exist_ok=True)
+        
+        # Setup validation dataset
+        from datasets.colmap import Dataset
+        valset = Dataset(parser_obj, split="val")
+        valloader = torch.utils.data.DataLoader(valset, batch_size=1, shuffle=False, num_workers=1)
+        
+        # Metrics
+        psnr_fn = PeakSignalNoiseRatio(data_range=1.0).to(device)
+        ssim_fn = StructuralSimilarityIndexMeasure(data_range=1.0).to(device)
+        lpips_fn = LearnedPerceptualImagePatchSimilarity(net_type="alex", normalize=True).to(device)
+        
+        metrics = defaultdict(list)
+        
+        for i, data in enumerate(tqdm(valloader, desc="Rendering")):
+            camtoworlds = data["camtoworld"].to(device)
+            Ks = data["K"].to(device)
+            pixels = data["image"].to(device) / 255.0
+            height, width = pixels.shape[1:3]
+            
+            # Render
+            means = splats["means"]
+            quats = splats["quats"]
+            scales = torch.exp(splats["scales"])
+            opacities = torch.sigmoid(splats["opacities"])
+            colors = torch.cat([splats["sh0"], splats["shN"]], dim=-1)
+            
+            renders, _, _ = rasterization(
+                means=means,
+                quats=quats,
+                scales=scales,
+                opacities=opacities,
+                colors=colors,
+                viewmats=torch.linalg.inv(camtoworlds),
+                Ks=Ks,
+                width=width,
+                height=height,
+                packed=False,
+                absgrad=False,
+                sparse_grad=False,
+                rasterize_mode="classic",
+                sh_degree=self.sh_degree,
+            )
+            
+            renders = torch.clamp(renders, 0.0, 1.0)
+            
+            # Save side-by-side comparison (GT | Rendered)
+            canvas = torch.cat([pixels, renders], dim=2).squeeze(0).cpu().numpy()
+            canvas = (canvas * 255).astype(np.uint8)
+            imageio.imwrite(render_dir / f"view_{i:03d}.png", canvas)
+            
+            # Compute metrics
+            pixels_p = pixels.permute(0, 3, 1, 2)
+            renders_p = renders.permute(0, 3, 1, 2)
+            metrics["psnr"].append(psnr_fn(renders_p, pixels_p))
+            metrics["ssim"].append(ssim_fn(renders_p, pixels_p))
+            metrics["lpips"].append(lpips_fn(renders_p, pixels_p))
+        
+        # Aggregate metrics
+        stats = {k: torch.stack(v).mean().item() for k, v in metrics.items()}
+        stats["num_GS"] = len(splats["means"])
+        
+        # Save metrics to JSON
+        import json
+        metrics_path = training_dir / "metrics.json"
+        with open(metrics_path, 'w') as f:
+            json.dump(stats, f, indent=2)
+        
+        return stats

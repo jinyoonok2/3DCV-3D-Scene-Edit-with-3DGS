@@ -84,6 +84,16 @@ class BasePhase(ABC):
         """
         pass
     
+    def is_complete(self) -> bool:
+        """
+        Check if this phase has already been completed.
+        Override in subclasses to define completion criteria.
+        
+        Returns:
+            bool: True if phase outputs already exist
+        """
+        return False
+    
     def save_metadata(self, results: Dict[str, Any]):
         """Save phase metadata to JSON."""
         metadata = {
@@ -114,6 +124,12 @@ class BasePhase(ABC):
         self.start_time = datetime.now()
         
         try:
+            # Check if already complete
+            if self.is_complete():
+                console.print(f"[yellow]Phase {self.phase_number} already complete - skipping[/yellow]")
+                console.print(f"[dim]Outputs exist in: {self.phase_dir}[/dim]\n")
+                return {"status": "skipped", "reason": "already_complete"}
+            
             # Validate inputs
             console.print("[bold]Validating inputs...[/bold]")
             if not self.validate_inputs():

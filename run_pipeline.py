@@ -50,6 +50,11 @@ def parse_args():
         action="store_true",
         help="Run all phases (1-4)",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force re-run even if outputs already exist",
+    )
     return parser.parse_args()
 
 
@@ -92,6 +97,11 @@ def main():
         try:
             PhaseClass = phase_classes[phase_num]
             phase = PhaseClass(config)
+            
+            # Override is_complete if --force flag is set
+            if args.force:
+                phase.is_complete = lambda: False
+            
             result = phase.run()
             results[phase_num] = result
         except Exception as e:
