@@ -1,0 +1,148 @@
+# ============================================================================
+# 3DGS Scene Editing Pipeline - Garden Scene Configuration
+# ============================================================================
+# This is the configuration for the garden scene brown plant removal project.
+# All modules will read settings from this file.
+#
+# Quick start:
+#   1. Edit the settings below (especially project name and segmentation prompt)
+#   2. Run: python 00_check_dataset.py (uses configs/garden_config.yaml by default)
+#   3. Continue with modules 01, 02, 03...
+#
+# For multiple projects, copy this file:
+#   cp configs/garden_config.yaml configs/my_experiment.yaml
+#   python 00_check_dataset.py --config configs/my_experiment.yaml
+# ============================================================================
+
+project:
+  name: "garden_brownplant_removal"        # Project identifier (output dir name)
+  scene: "garden"                          # Scene name (e.g., garden, bicycle, kitchen)
+  task: "removal"                          # Task type: removal, replacement, editing
+  description: "Remove brown plant from garden scene"
+
+paths:
+  # Input paths
+  dataset_root: "datasets/360_v2/garden"   # Original dataset location
+  
+  # Output root (all outputs go here)
+  output_root: "outputs/${project.name}"   # Automatically uses project name
+  
+  # Unified module output directories (numbered for easy navigation)
+  dataset_check: "00_dataset_validation"
+  initial_training: "01_initial_training"
+  renders: "02_rendered_views" 
+  masks: "03_generated_masks"
+  roi: "04_roi_extraction"
+  inpainting: "05_scene_editing"
+  scene_placement: "06_object_placement"       # Object placement (Step 06)
+  final_visualization: "07_final_visualization"  # Final renders and evaluation (Step 07)
+  logs: "00_pipeline_logs"                     # Central logging
+
+dataset:
+  factor: 4                                # Downsampling factor (1, 2, 4, 8)
+  test_every: 8                            # Test image frequency
+  seed: 42                                 # Random seed
+
+training:
+  iterations: 30000                        # Initial GS training iterations
+  sh_degree: 3                             # Spherical harmonics degree
+  eval_steps: [7000, 30000]                # When to run evaluation
+  save_steps: [7000, 30000]                # When to save checkpoints
+
+segmentation:
+  text_prompt: "brown plant"               # Object to segment
+  box_threshold: 0.35                      # GroundingDINO box confidence
+  dino_threshold: 0.25                     # GroundingDINO text threshold (same as text_threshold)
+  text_threshold: 0.25                     # GroundingDINO text confidence
+  nms_threshold: 0.8                       # Non-maximum suppression
+  sam_model: "sam2_hiera_large"            # SAM2 model variant
+  
+  # Selection modes
+  dino_selection: "largest"                # Box selection: "confidence", "largest", or null (all boxes)
+  sam_selection: null                      # Mask selection: "confidence" or null (all masks)
+  sam_thresh: 0.3                          # SAM2 confidence threshold (0.0-1.0)
+  
+  # Spatial filtering (optional)
+  reference_box: [0.36, 0.2, 0.64, 0.58]  # [x1,y1,x2,y2] reference box for spatial filtering
+  reference_box_normalized: true           # If true, coordinates are [0-1], else pixels
+  reference_overlap_thresh: 0.7            # Minimum overlap with reference box (0.0-1.0)
+  
+roi:
+  threshold: 0.05                          # ROI weight threshold for deletion (lower = more permissive)
+  min_views: 3                             # Min views for Gaussian to be in ROI
+  
+inpainting:
+  # Module 05a - Removal
+  removal:
+    roi_threshold: 0.05                    # Which Gaussians to delete (same as ROI threshold)
+    
+  # Module 05b - LaMa Inpainting (default method for clean object removal)
+  
+  # Module 05c - Optimization
+  optimization:
+    iterations: 1000                       # Optimization iterations
+    densification:
+      start_iter: 100                      # When to start densification
+      stop_iter: 800                       # When to stop densification
+      grad_thresh: 0.0002                  # Gradient threshold for densification
+      densify_every: 100                   # Densification frequency
+    learning_rates:
+      means: 0.00016                       # Position learning rate
+      scales: 0.005                        # Scale learning rate
+      quats: 0.001                         # Rotation learning rate
+      opacities: 0.05                      # Opacity learning rate
+      sh0: 0.0025                          # SH DC component learning rate
+      shN: 0.0025                          # SH rest component learning rate
+
+# Replacement-specific config (for modules 06-07)
+replacement:
+  enabled: true                            # Set to true for replacement pipeline
+  
+  # Module 06 - Object Placement
+  placement:
+    object_gaussians: "GaussianDreamerResults/coffee_cup_pro.ply"  # Path to object Gaussians (.pt or .ply from external generation)
+                                          # Example: "GaussianDreamerResults/your_object.ply"
+                                          # Generate externally using GaussianDreamer/GaussianDreamerPro
+    roi_file: "outputs/${project.name}/04_roi_extraction/roi.pt"  # ROI from Module 04a
+    scene_gaussians: "outputs/${project.name}/05_scene_editing/05c_optimized/ckpt_patched.pt"  # Scene after removal from Module 05c
+    alignment_method: "depth"              # depth, manual, or auto
+    scale: 0.06                             # Manual uniform scale multiplier
+    xyz_offset: [-0.22, -0.15, -0.06]           # XYZ offset from ROI center in meters [x, y, z]
+    rotation_degrees: 0.0                  # Rotation around Z-axis in degrees
+    output_merged: "outputs/${project.name}/06_object_placement/merged_gaussians.pt"
+      
+  # Module 07 - Visualization & Evaluation
+  visualization:
+    merged_checkpoint: "outputs/${project.name}/06_object_placement/merged_gaussians.pt"  # Merged scene from Module 06
+    original_checkpoint: "outputs/${project.name}/01_initial_training/ckpt_initial.pt"  # Original scene from Module 01
+    metrics: ["clip", "lpips", "ssim", "psnr"]
+    clip_model: "ViT-B/32"
+    num_eval_views: 20                     # Number of views to evaluate
+
+# Hardware settings
+hardware:
+  device: "cuda"                           # cuda or cpu
+  num_workers: 4                           # DataLoader workers
+  mixed_precision: true                    # Use fp16 for speed
+
+# Unified output structure settings
+output:
+  # File naming conventions
+  checkpoint_prefix: "ckpt_"               # ckpt_initial.pt, ckpt_holed.pt
+  render_format: "05d"                     # 00000.png, 00001.png, etc.
+  
+  # Create summary files in each module
+  create_summaries: true                   # Generate README.md in each output folder
+  save_manifests_local: true               # Save manifest.json in each module folder
+  
+  # Directory structure within modules
+  subdirs:
+    renders: ["train", "val", "test"]
+    masks: ["sam_masks", "projected_masks"]
+    models: ["checkpoints", "metrics"]
+
+# Logging
+logging:
+  level: "INFO"                            # DEBUG, INFO, WARNING, ERROR
+  save_renders: true                       # Save intermediate renders
+  save_frequency: 100                      # How often to log during training

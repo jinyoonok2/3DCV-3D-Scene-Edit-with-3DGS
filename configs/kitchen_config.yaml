@@ -1,149 +1,110 @@
 # ============================================================================
-# 3DGS Scene Editing Pipeline - Kitchen Scene Configuration
-# ============================================================================
-# This is the configuration for the kitchen scene yellow tracker toy removal project.
-# All modules will read settings from this file.
-#
-# Quick start:
-#   1. Edit the settings below (especially project name and segmentation prompt)
-#   2. Run: python 00_check_dataset.py --config configs/kitchen_config.yaml
-#   3. Continue with modules 01, 02, 03...
-#
-# For multiple projects, copy this file:
-#   cp configs/kitchen_config.yaml configs/my_experiment.yaml
-#   python 00_check_dataset.py --config configs/my_experiment.yaml
+# Kitchen Scene - Counter Removal + Object Placement
+# For use with the new pipeline architecture (run_pipeline.py)
 # ============================================================================
 
 project:
-  name: "kitchen_yellowtracker_removal"   # Project identifier (output dir name)
-  scene: "kitchen"                         # Scene name (e.g., garden, bicycle, kitchen)
-  task: "removal"                          # Task type: removal, replacement, editing
-  description: "Remove yellow tracker toy from kitchen scene"
+  name: "kitchen_counter_removal"
+  scene: "kitchen"
+  task: "removal_and_placement"
+  description: "Remove kitchen counter and place cowboy boots"
 
+# Paths - all outputs go to phase-based directories
 paths:
-  # Input paths
-  dataset_root: "datasets/360_v2/kitchen"  # Original dataset location
-  
-  # Output root (all outputs go here)
-  output_root: "outputs/${project.name}"   # Automatically uses project name
-  
-  # Unified module output directories (numbered for easy navigation)
-  dataset_check: "00_dataset_validation"
-  initial_training: "01_initial_training"
-  renders: "02_rendered_views" 
-  masks: "03_generated_masks"
-  roi: "04_roi_extraction"
-  inpainting: "05_scene_editing"
-  scene_placement: "06_object_placement"       # Object placement (Step 06)
-  final_visualization: "07_final_visualization"  # Final renders and evaluation (Step 07)
-  logs: "00_pipeline_logs"                     # Central logging
+  dataset_root: "datasets/360_v2/kitchen"
+  output_root: "outputs/${project.name}"
 
+# Output structure (phase-based)
+output_structure:
+  phase1_training:
+    checkpoint: "ckpt_initial.pt"
+    renders: "renders/"
+    metrics: "metrics.json"
+  phase2_segmentation:
+    masks: "masks/"
+    overlays: "overlays/"
+    coverage: "coverage.csv"
+  phase3_removal:
+    holed_renders: "holed/renders/"
+    inpainted: "inpainted/"
+    optimized_checkpoint: "optimized/ckpt_final.pt"
+  phase4_placement:
+    final_checkpoint: "ckpt_with_object.pt"
+    renders: "renders/"
+    metrics: "metrics.json"
+
+# Dataset settings
 dataset:
-  factor: 4                                # Downsampling factor (1, 2, 4, 8)
-  test_every: 8                            # Test image frequency
-  seed: 42                                 # Random seed
+  factor: 4                    # Downsample factor
+  test_every: 8                # Test image frequency
+  seed: 42                     # Random seed
 
+# Phase 1: Training
 training:
-  iterations: 30000                        # Initial GS training iterations
-  sh_degree: 3                             # Spherical harmonics degree
-  eval_steps: [7000, 30000]                # When to run evaluation
-  save_steps: [7000, 30000]                # When to save checkpoints
+  iterations: 30000            # GS training iterations
+  sh_degree: 3                 # Spherical harmonics degree
+  eval_steps: [7000, 30000]    # Evaluation checkpoints
+  save_steps: [7000, 30000]    # Save checkpoints
 
+# Phase 2: Segmentation
 segmentation:
-  text_prompt: "yellow tracker toy"        # Object to segment
-  box_threshold: 0.35                      # GroundingDINO box confidence
-  dino_threshold: 0.25                     # GroundingDINO text threshold (same as text_threshold)
-  text_threshold: 0.25                     # GroundingDINO text confidence
-  nms_threshold: 0.8                       # Non-maximum suppression
-  sam_model: "sam2_hiera_large"            # SAM2 model variant
+  text_prompt: "kitchen counter"  # Object to segment
+  box_threshold: 0.35          # GroundingDINO confidence
+  text_threshold: 0.25         # Text matching threshold
+  nms_threshold: 0.8           # Non-maximum suppression
+  sam_model: "sam2_hiera_large"
+  dino_selection: "largest"    # Use largest detected box
+  sam_selection: null          # Use all SAM masks
+  sam_thresh: 0.3
   
-  # Selection modes
-  dino_selection: "largest"                # Box selection: "confidence", "largest", or null (all boxes)
-  sam_selection: null                      # Mask selection: "confidence" or null (all masks)
-  sam_thresh: 0.3                          # SAM2 confidence threshold (0.0-1.0)
-  
-  # Spatial filtering (optional) - adjust these for kitchen scene
-  reference_box: null                      # [x1,y1,x2,y2] reference box for spatial filtering (set if needed)
-  reference_box_normalized: true           # If true, coordinates are [0-1], else pixels
-  reference_overlap_thresh: 0.7            # Minimum overlap with reference box (0.0-1.0)
-  
+  # Spatial filtering
+  reference_box: null          # No spatial filtering for kitchen
+  reference_box_normalized: true
+  reference_overlap_thresh: 0.7
+
+# Phase 3: Removal
 roi:
-  threshold: 0.01                          # ROI weight threshold for deletion (lower = more aggressive removal)
-  min_views: 2                             # Min views for Gaussian to be in ROI (lower = more aggressive)
-  
-inpainting:
-  # Module 05a - Removal
-  removal:
-    roi_threshold: 0.01                    # Which Gaussians to delete (same as ROI threshold)
-    
-  # Module 05b - LaMa Inpainting (default method for clean object removal)
-  
-  # Module 05c - Optimization
+  threshold: 0.05              # ROI weight threshold
+  min_views: 3                 # Min views for ROI inclusion
+
+removal:
+  method: "lama"               # Inpainting method
   optimization:
-    iterations: 500                        # Optimization iterations (reduced to avoid over-fitting)
+    iterations: 1000
     densification:
-      start_iter: 100                      # When to start densification
-      stop_iter: 400                       # When to stop densification (80% of iterations)
-      grad_thresh: 0.0005                  # Gradient threshold for densification (higher = less aggressive)
-      densify_every: 100                   # Densification frequency
+      start_iter: 100
+      stop_iter: 800
+      grad_thresh: 0.0002
+      densify_every: 100
     learning_rates:
-      means: 0.00008                       # Position learning rate (reduced by half)
-      scales: 0.0025                       # Scale learning rate (reduced by half)
-      quats: 0.0005                        # Rotation learning rate (reduced by half)
-      opacities: 0.025                     # Opacity learning rate (reduced by half)
-      sh0: 0.00125                         # SH DC component learning rate (reduced by half)
-      shN: 0.00125                         # SH rest component learning rate (reduced by half)
+      means: 0.00016
+      scales: 0.005
+      quats: 0.001
+      opacities: 0.05
+      sh0: 0.0025
+      shN: 0.0025
 
-# Replacement-specific config (for modules 06-07)
-replacement:
-  enabled: true                            # Set to true for replacement pipeline
+# Phase 4: Object Placement
+placement:
+  object_gaussians: "GaussianDreamerResults/cowboy_boots_pro.ply"
+  scale: 0.7                   # Object scale multiplier
+  xyz_offset: [1.93, 0.46, 1.0]  # XYZ offset from ROI center (tested working)
+  rotation_degrees: 0.0        # Rotation around Z-axis
   
-  # Module 06 - Object Placement
-  placement:
-    object_gaussians: "GaussianDreamerResults/cowboy_boots_pro.ply"  # Path to object Gaussians (.pt or .ply from external generation)
-                                          # Example: "GaussianDreamerResults/your_object.ply"
-                                          # Generate externally using GaussianDreamer/GaussianDreamerPro
-    roi_file: "outputs/${project.name}/04_roi_extraction/roi.pt"  # ROI from Module 04a
-    scene_gaussians: "outputs/${project.name}/05_scene_editing/05c_optimized/ckpt_patched.pt"  # Scene after removal from Module 05c
-    alignment_method: "depth"              # depth, manual, or auto
-    scale: 0.16                             # Manual uniform scale multiplier
-    xyz_offset: [2.03, 0.60, 0.5]         # XYZ offset from ROI center in meters [x, y, z]
-    rotation_degrees: 0.0                  # Rotation around Z-axis in degrees
-    output_merged: "outputs/${project.name}/06_object_placement/merged_gaussians.pt"
-      
-  # Module 07 - Visualization & Evaluation
-  visualization:
-    merged_checkpoint: "outputs/${project.name}/06_object_placement/merged_gaussians.pt"  # Merged scene from Module 06
-    original_checkpoint: "outputs/${project.name}/01_initial_training/ckpt_initial.pt"  # Original scene from Module 01
-    metrics: ["clip", "lpips", "ssim", "psnr"]
-    clip_model: "ViT-B/32"
-    num_eval_views: 20                     # Number of views to evaluate
+  # Visualization
+  num_eval_views: 20
+  metrics: ["clip", "lpips", "ssim", "psnr"]
+  clip_model: "ViT-B/32"
 
-# Hardware settings
+# Hardware
 hardware:
-  device: "cuda"                           # cuda or cpu
-  num_workers: 4                           # DataLoader workers
-  mixed_precision: true                    # Use fp16 for speed
-
-# Unified output structure settings
-output:
-  # File naming conventions
-  checkpoint_prefix: "ckpt_"               # ckpt_initial.pt, ckpt_holed.pt
-  render_format: "05d"                     # 00000.png, 00001.png, etc.
-  
-  # Create summary files in each module
-  create_summaries: true                   # Generate README.md in each output folder
-  save_manifests_local: true               # Save manifest.json in each module folder
-  
-  # Directory structure within modules
-  subdirs:
-    renders: ["train", "val", "test"]
-    masks: ["sam_masks", "projected_masks"]
-    models: ["checkpoints", "metrics"]
+  device: "cuda"
+  num_workers: 4
+  mixed_precision: true
 
 # Logging
 logging:
-  level: "INFO"                            # DEBUG, INFO, WARNING, ERROR
-  save_renders: true                       # Save intermediate renders
-  save_frequency: 100                      # How often to log during training
+  level: "INFO"
+  save_renders: true
+  save_frequency: 100
 
