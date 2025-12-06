@@ -107,7 +107,7 @@ replacement:
     scene_gaussians: "outputs/${project.name}/05_scene_editing/05c_optimized/ckpt_patched.pt"  # Scene after removal from Module 05c
     alignment_method: "depth"              # depth, manual, or auto
     scale: 0.16                             # Manual uniform scale multiplier
-    xyz_offset: [1.93, 0.46, 0.4]         # XYZ offset from ROI center in meters [x, y, z]
+    xyz_offset: [1.93, 0.46, 0.5]         # XYZ offset from ROI center in meters [x, y, z]
     rotation_degrees: 0.0                  # Rotation around Z-axis in degrees
     output_merged: "outputs/${project.name}/06_object_placement/merged_gaussians.pt"
       
