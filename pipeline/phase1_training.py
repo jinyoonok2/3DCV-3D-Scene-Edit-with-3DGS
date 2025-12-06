@@ -34,16 +34,16 @@ class Phase1Training(BasePhase):
     def __init__(self, config):
         super().__init__(config, phase_name="training", phase_number=1)
         
-        # Get training config
+        # Get training config - use correct syntax: config.get(key1, key2, ..., default=val)
         self.dataset_root = Path(config.get("paths", "dataset_root"))
-        self.factor = config.get("dataset", "factor", 4)
-        self.test_every = config.get("dataset", "test_every", 8)
-        self.seed = config.get("dataset", "seed", 42)
+        self.factor = config.get("dataset", "factor", default=4)
+        self.test_every = config.get("dataset", "test_every", default=8)
+        self.seed = config.get("dataset", "seed", default=42)
         
-        self.iterations = config.get("training", "iterations", 30000)
-        self.sh_degree = config.get("training", "sh_degree", 3)
-        self.eval_steps = config.get("training", "eval_steps", [7000, 30000])
-        self.save_steps = config.get("training", "save_steps", [7000, 30000])
+        self.iterations = config.get("training", "iterations", default=30000)
+        self.sh_degree = config.get("training", "sh_degree", default=3)
+        self.eval_steps = config.get("training", "eval_steps", default=[7000, 30000])
+        self.save_steps = config.get("training", "save_steps", default=[7000, 30000])
         
         self.metadata.update({
             "dataset_root": str(self.dataset_root),
