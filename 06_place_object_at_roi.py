@@ -407,6 +407,13 @@ def main():
     placement_config = config.config.get('replacement', {}).get('placement', {})
     project_name = config.get("project", "name")
     
+    # Override placement mode from config if not explicitly provided via CLI
+    if args.placement == "bottom":  # Check if it's still the default value
+        config_placement = placement_config.get('placement', 'bottom')
+        if config_placement != 'bottom':
+            args.placement = config_placement
+            console.print(f"[cyan]Using placement mode from config:[/cyan] {config_placement}")
+    
     # Get paths from config or CLI
     if args.object_gaussians:
         object_path = args.object_gaussians
