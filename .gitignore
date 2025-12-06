@@ -16,10 +16,6 @@ venv-generation/
 env/
 ENV/
 
-# Conda environments (if created locally)
-envs/
-.conda/
-
 # Data and external dependencies
 datasets/
 GroundingDINO/
