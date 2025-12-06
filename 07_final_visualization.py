@@ -93,8 +93,8 @@ def parse_args():
     parser.add_argument(
         "--views",
         type=str,
-        default="val",
-        help="Which views to render: 'all', 'train', 'val', or comma-separated indices (default: val)",
+        default="train",
+        help="Which views to render: 'all', 'train', 'val', or comma-separated indices (default: train)",
     )
     parser.add_argument(
         "--num_views",
