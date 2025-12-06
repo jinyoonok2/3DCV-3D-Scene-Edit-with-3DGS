@@ -1,10 +1,11 @@
 # 3D Scene Editing with 3D Gaussian Splatting
 
-Text-guided 3D scene editing: **gsplat + SAM2 + GroundingDINO + TripoSR + SDXL**
+Text-guided 3D scene editing: **gsplat + SAM2 + GroundingDINO + LaMa + GaussianDreamer**
 
-**Two-Phase Architecture:**
-- **Phase 1 - Object Removal** (00-05c): Train → Segment → Remove → Inpaint → Optimize
-- **Phase 2 - Object Placement** (06-07): Place pre-generated Gaussians at ROI → Visualize
+**Pipeline Architecture:**
+- **Steps 00-05c**: Dataset validation → Train → Segment → Remove → Inpaint → Optimize
+- **Step 06**: Place pre-generated object Gaussians at ROI
+- **Step 07**: Final visualization with 4-stage comparison grids
 
 ---
 
@@ -27,9 +28,6 @@ cd 3DCV-3D-Scene-Edit-with-3DGS
 # ./download.sh models    # Models only (~1.5 GB)
 # ./download.sh datasets  # MipNeRF-360 dataset only (~10 GB extracted)
 # ./download.sh gdrive    # GaussianDreamerResults from Google Drive
-# or download separately:
-# ./download.sh models    # Models only (~1.5 GB)
-# ./download.sh datasets  # MipNeRF-360 dataset only (~10 GB extracted)
 
 # Setup conda environment
 ./setup.sh
@@ -40,38 +38,145 @@ source activate.sh
 
 **Note**: The download script automatically checks for existing files and only downloads what's missing.
 
-### Object Removal Pipeline (Steps 00-05c)
+### Run Full Pipeline
+
+**Using the shell script (easiest):**
 ```bash
-# Activate environment
-source activate.sh
+# Run all steps (00-07) for garden scene
+./run_full_pipeline.sh configs/garden_config.yaml
 
-# Initialize project config
-python init_project.py --scene garden --dataset_root datasets/360_v2/garden
+# Run all steps for kitchen scene
+./run_full_pipeline.sh configs/kitchen_config.yaml
 
-# Run pipeline steps
-python 00_check_dataset.py
-python 01_train_gs_initial.py
-python 02_render_training_views.py
-python 03_ground_text_to_masks.py --text "brown plant"
-python 04a_lift_masks_to_roi3d.py
-python 04b_visualize_roi.py  # Optional visualization
-python 05a_remove_and_render_holes.py
-python 05b_inpaint_holes.py
-python 05c_optimize_to_targets.py
+# Run both sequentially
+./run_full_pipeline.sh configs/garden_config.yaml && ./run_full_pipeline.sh configs/kitchen_config.yaml
 ```
 
-### Object Placement Pipeline (Steps 06-07)
+**Manual step-by-step execution:**
 ```bash
-# Generate object Gaussians externally (using GaussianDreamer/GaussianDreamerPro notebook)
-# The generated .ply file should be placed in the project directory
+# Garden scene
+python 00_check_dataset.py --config configs/garden_config.yaml
+python 01_train_gs_initial.py --config configs/garden_config.yaml
+python 02_render_training_views.py --config configs/garden_config.yaml
+python 03_ground_text_to_masks.py --config configs/garden_config.yaml
+python 04a_lift_masks_to_roi3d.py --config configs/garden_config.yaml
+python 05a_remove_and_render_holes.py --config configs/garden_config.yaml
+python 05b_inpaint_holes.py --config configs/garden_config.yaml
+python 05c_optimize_to_targets.py --config configs/garden_config.yaml
+python 06_place_object_at_roi.py --config configs/garden_config.yaml
+python 07_final_visualization.py --config configs/garden_config.yaml
+```
 
-# Place object in scene (uses configs/garden_config.yaml default or specify path)
-python 06_place_object_at_roi.py
-# or with custom object:
-python 06_place_object_at_roi.py --object_gaussians path/to/object.ply
+---
 
-# Visualize final result
-python 07_final_visualization.py
+## Configuration Files
+
+Two pre-configured scenes are provided:
+
+**`configs/garden_config.yaml`**
+- Scene: MipNeRF-360 Garden
+- Task: Remove brown plant, place coffee cup
+- Object: `GaussianDreamerResults/coffee_cup_pro.ply`
+- Scale: 0.05, Offset: [-0.17, -0.05, 0.0]
+
+**`configs/kitchen_config.yaml`**
+- Scene: MipNeRF-360 Kitchen  
+- Task: Remove chair, place cowboy boots
+- Object: `GaussianDreamerResults/cowboy_boots_pro.ply`
+- Scale: 0.7, Offset: [1.93, 0.46, 1.0]
+
+Edit these files to customize:
+- Dataset paths
+- Segmentation prompts
+- Object placement parameters
+- Training iterations
+- Output directories
+
+---
+
+## Pipeline Steps
+
+### 00: Dataset Validation
+Validates COLMAP dataset structure and creates thumbnails.
+```bash
+python 00_check_dataset.py --config configs/garden_config.yaml
+```
+
+### 01: Initial Training
+Trains 3D Gaussian Splatting model (30k iterations).
+```bash
+python 01_train_gs_initial.py --config configs/garden_config.yaml
+```
+
+### 02: Render Training Views
+Renders all training views from the trained model.
+```bash
+python 02_render_training_views.py --config configs/garden_config.yaml
+```
+
+### 03: Generate Masks
+Uses GroundingDINO + SAM2 to segment target object.
+```bash
+python 03_ground_text_to_masks.py --config configs/garden_config.yaml
+```
+
+### 04a: Extract 3D ROI
+Lifts 2D masks to 3D region of interest.
+```bash
+python 04a_lift_masks_to_roi3d.py --config configs/garden_config.yaml
+```
+
+### 04b: Visualize ROI (Optional)
+Visualizes the extracted 3D ROI.
+```bash
+python 04b_visualize_roi.py --config configs/garden_config.yaml
+```
+
+### 05a: Remove Object
+Removes Gaussians in ROI and renders holes.
+```bash
+python 05a_remove_and_render_holes.py --config configs/garden_config.yaml
+```
+
+### 05b: Inpaint Holes
+Uses LaMa to inpaint the holes in training views.
+```bash
+python 05b_inpaint_holes.py --config configs/garden_config.yaml
+```
+
+### 05c: Optimize Scene
+Optimizes Gaussians to match inpainted targets.
+```bash
+python 05c_optimize_to_targets.py --config configs/garden_config.yaml
+```
+
+### 06: Place Object
+Loads object Gaussians and places them at ROI.
+```bash
+python 06_place_object_at_roi.py --config configs/garden_config.yaml
+```
+
+### 07: Final Visualization
+Creates comparison grids and final renders.
+```bash
+python 07_final_visualization.py --config configs/garden_config.yaml
+```
+
+**Outputs:**
+- `merged/`: Final rendered views with object (00000.png, 00001.png, ...)
+- `comparisons/`: 4-panel grids (2x2 layout)
+  - Top-left: Original
+  - Top-right: Removed (05a)
+  - Bottom-left: Optimized (05c)
+  - Bottom-right: Final with object
+
+**Create GIFs:**
+```bash
+# From final merged results
+ffmpeg -framerate 10 -pattern_type glob -i 'outputs/*/07_final_visualization/merged/*.png' -vf scale=1920:-1 merged_animation.gif
+
+# From 4-panel comparisons
+ffmpeg -framerate 10 -pattern_type glob -i 'outputs/*/07_final_visualization/comparisons/*.png' -vf scale=1920:-1 comparison_animation.gif
 ```
 
 ---
@@ -92,12 +197,10 @@ This project uses a **unified conda environment** for all pipeline steps:
 - SAM2 (Segment Anything)
 - GroundingDINO (text-to-box detection)
 - LaMa (inpainting)
-- SDXL (diffusion models)
 
 **Object Generation**: Handled externally using GaussianDreamer/GaussianDreamerPro notebooks, not part of this environment.
 
 ---
-
 ## Configuration System
 
 All modules support dual-mode operation: config file + CLI overrides.
