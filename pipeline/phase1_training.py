@@ -153,8 +153,10 @@ class Phase1Training(BasePhase):
             pin_memory=True,
         )
         
+        # Setup strategy with scene_scale (like legacy code)
+        scene_scale = parser_obj.scene_scale * 1.1
         strategy = DefaultStrategy()
-        strategy_state = strategy.initialize_state()
+        strategy_state = strategy.initialize_state(scene_scale=scene_scale)
         psnr_metric = PeakSignalNoiseRatio(data_range=1.0).to(device)
         
         trainloader_iter = iter(trainloader)
