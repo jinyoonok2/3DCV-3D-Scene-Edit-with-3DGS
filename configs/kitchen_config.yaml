@@ -80,10 +80,10 @@ inpainting:
   
   # Module 05c - Optimization
   optimization:
-    iterations: 1000                       # Optimization iterations
+    iterations: 2000                       # Optimization iterations (increased for better quality)
     densification:
       start_iter: 100                      # When to start densification
-      stop_iter: 800                       # When to stop densification
+      stop_iter: 1600                      # When to stop densification (80% of iterations)
       grad_thresh: 0.0002                  # Gradient threshold for densification
       densify_every: 100                   # Densification frequency
     learning_rates:
