@@ -11,9 +11,16 @@ This phase:
 
 Outputs:
 - phase1_training/
-  ├── ckpt_initial.pt          # Trained GS model
-  ├── metrics.json             # Training metrics
-  └── renders/                 # Sample renders
+  ├── 00_dataset_validation/
+  │   ├── thumbs/              # Dataset thumbnails
+  │   └── summary.txt          # Dataset statistics
+  ├── 01_initial_training/
+  │   ├── ckpt_initial.pt      # Trained GS model
+  │   ├── renders/
+  │   │   └── train/           # Training renders
+  │   ├── checkpoints/         # Intermediate checkpoints
+  │   └── metrics/             # Training metrics
+  └── manifest.json            # Phase metadata
 """
 
 import sys
@@ -45,12 +52,11 @@ class Phase1Training(BasePhase):
         self.eval_steps = config.get("training", "eval_steps", default=[7000, 30000])
         self.save_steps = config.get("training", "save_steps", default=[7000, 30000])
         
-        # Create subdirectories
-        (self.phase_dir / "dataset_validation").mkdir(exist_ok=True)
-        (self.phase_dir / "dataset_validation" / "thumbs").mkdir(exist_ok=True)
-        (self.phase_dir / "renders").mkdir(exist_ok=True)
-        (self.phase_dir / "checkpoints").mkdir(exist_ok=True)
-        (self.phase_dir / "metrics").mkdir(exist_ok=True)
+        # Create subdirectories matching old numbered structure
+        (self.phase_dir / "00_dataset_validation" / "thumbs").mkdir(parents=True, exist_ok=True)
+        (self.phase_dir / "01_initial_training" / "renders" / "train").mkdir(parents=True, exist_ok=True)
+        (self.phase_dir / "01_initial_training" / "checkpoints").mkdir(parents=True, exist_ok=True)
+        (self.phase_dir / "01_initial_training" / "metrics").mkdir(parents=True, exist_ok=True)
         
         self.metadata.update({
             "dataset_root": str(self.dataset_root),
@@ -252,7 +258,8 @@ class Phase1Training(BasePhase):
         
         # Save checkpoint
         console.print("[bold cyan]Saving checkpoint...[/bold cyan]")
-        ckpt_path = self.phase_dir / "ckpt_initial.pt"
+        training_dir = self.phase_dir / "01_initial_training"
+        ckpt_path = training_dir / "ckpt_initial.pt"
         torch.save({"step": self.iterations, "splats": splats.state_dict()}, ckpt_path)
         console.print(f"✓ Checkpoint saved: {ckpt_path}\n")
         
@@ -269,7 +276,7 @@ class Phase1Training(BasePhase):
         """Save dataset thumbnails and summary like legacy code."""
         import imageio.v2 as imageio
         
-        val_dir = self.phase_dir / "dataset_validation"
+        val_dir = self.phase_dir / "00_dataset_validation"
         thumbs_dir = val_dir / "thumbs"
         
         # Save thumbnails (sample 6 images)

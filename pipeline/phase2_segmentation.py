@@ -15,12 +15,15 @@ This phase:
 
 Outputs:
 - phase2_segmentation/
-  ├── renders/              # Rendered training views
-  ├── boxes/               # GroundingDINO detection boxes
-  ├── sam_masks/           # SAM2 generated masks
-  ├── projected_masks/     # Masks projected onto training views
-  ├── overlays/            # Visualization overlays
-  ├── roi.pt              # 3D ROI binary mask
+  ├── 02_rendered_views/
+  │   └── renders/          # Rendered training views
+  ├── 03_generated_masks/
+  │   ├── boxes/            # GroundingDINO detection boxes
+  │   ├── sam_masks/        # SAM2 generated masks
+  │   ├── projected_masks/  # Masks projected onto training views
+  │   └── overlays/         # Visualization overlays
+  ├── 04_roi_extraction/
+  │   └── roi.pt           # 3D ROI binary mask
   └── manifest.json        # Metadata
 """
 
@@ -68,12 +71,13 @@ class Phase2Segmentation(BasePhase):
         self.factor = config.get("dataset", "factor", default=4)
         self.test_every = config.get("dataset", "test_every", default=8)
         
-        # Create subdirectories
-        (self.phase_dir / "renders").mkdir(exist_ok=True)
-        (self.phase_dir / "boxes").mkdir(exist_ok=True)
-        (self.phase_dir / "sam_masks").mkdir(exist_ok=True)
-        (self.phase_dir / "projected_masks").mkdir(exist_ok=True)
-        (self.phase_dir / "overlays").mkdir(exist_ok=True)
+        # Create subdirectories matching old numbered structure
+        (self.phase_dir / "02_rendered_views" / "renders").mkdir(parents=True, exist_ok=True)
+        (self.phase_dir / "03_generated_masks" / "boxes").mkdir(parents=True, exist_ok=True)
+        (self.phase_dir / "03_generated_masks" / "sam_masks").mkdir(parents=True, exist_ok=True)
+        (self.phase_dir / "03_generated_masks" / "projected_masks").mkdir(parents=True, exist_ok=True)
+        (self.phase_dir / "03_generated_masks" / "overlays").mkdir(parents=True, exist_ok=True)
+        (self.phase_dir / "04_roi_extraction").mkdir(exist_ok=True)
         
         self.metadata.update({
             "text_prompt": self.text_prompt,
@@ -89,7 +93,7 @@ class Phase2Segmentation(BasePhase):
         
         # Check for Phase 1 checkpoint
         phase1_dir = self.output_root / "phase1_training"
-        ckpt_path = phase1_dir / "ckpt_initial.pt"
+        ckpt_path = phase1_dir / "01_initial_training" / "ckpt_initial.pt"
         
         if not ckpt_path.exists():
             console.print(f"[red]Phase 1 checkpoint not found:[/red] {ckpt_path}")
@@ -114,7 +118,7 @@ class Phase2Segmentation(BasePhase):
         # Step 1: Load checkpoint from Phase 1
         console.print("[bold cyan]Step 1/5: Loading Phase 1 checkpoint...[/bold cyan]")
         phase1_dir = self.output_root / "phase1_training"
-        ckpt_path = phase1_dir / "ckpt_initial.pt"
+        ckpt_path = phase1_dir / "01_initial_training" / "ckpt_initial.pt"
         
         checkpoint = torch.load(ckpt_path, map_location=device)
         splats = torch.nn.ParameterDict(checkpoint["splats"])
@@ -133,7 +137,7 @@ class Phase2Segmentation(BasePhase):
         
         # Step 3: Render training views
         console.print(f"[bold cyan]Step 3/5: Rendering {len(trainset)} training views...[/bold cyan]")
-        renders_dir = self.phase_dir / "renders"
+        renders_dir = self.phase_dir / "02_rendered_views" / "renders"
         
         for idx in tqdm(range(len(trainset)), desc="Rendering"):
             data = trainset[idx]
@@ -182,7 +186,7 @@ class Phase2Segmentation(BasePhase):
         roi_mask = self._lift_masks_to_roi(splats, parser_obj, trainset, console, device)
         
         # Save ROI
-        roi_path = self.phase_dir / "roi.pt"
+        roi_path = self.phase_dir / "04_roi_extraction" / "roi.pt"
         torch.save(roi_mask, roi_path)
         console.print(f"✓ ROI saved: {roi_path}\n")
         
@@ -216,8 +220,8 @@ class Phase2Segmentation(BasePhase):
             cv2.rectangle(mask, (w//4, h//4), (3*w//4, 3*h//4), 255, -1)
             
             # Save dummy outputs
-            cv2.imwrite(str(self.phase_dir / "boxes" / img_path.name), image)
-            cv2.imwrite(str(self.phase_dir / "sam_masks" / img_path.name), mask)
+            cv2.imwrite(str(self.phase_dir / "03_generated_masks" / "boxes" / img_path.name), image)
+            cv2.imwrite(str(self.phase_dir / "03_generated_masks" / "sam_masks" / img_path.name), mask)
             
             overlay = image.copy()
             overlay[mask > 0] = overlay[mask > 0] * 0.5 + np.array([0, 255, 0]) * 0.5
@@ -228,7 +232,7 @@ class Phase2Segmentation(BasePhase):
         import cv2
         
         # Load all masks
-        mask_files = sorted((self.phase_dir / "sam_masks").glob("*.png"))
+        mask_files = sorted((self.phase_dir / "03_generated_masks" / "sam_masks").glob("*.png"))
         num_gaussians = len(splats["means"])
         roi_weights = torch.zeros(num_gaussians, device=device)
         
