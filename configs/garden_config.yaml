@@ -100,7 +100,7 @@ replacement:
   
   # Module 06 - Object Placement
   placement:
-    object_gaussians: null                 # Path to object Gaussians (.pt or .ply from external generation)
+    object_gaussians: "GaussianDreamerResults/cowboy_boots_pro.ply"  # Path to object Gaussians (.pt or .ply from external generation)
                                           # Example: "GaussianDreamerResults/your_object.ply"
                                           # Generate externally using GaussianDreamer/GaussianDreamerPro
     roi_file: "outputs/${project.name}/04_roi_extraction/roi.pt"  # ROI from Module 04a
