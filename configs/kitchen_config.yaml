@@ -68,31 +68,31 @@ segmentation:
   reference_overlap_thresh: 0.7            # Minimum overlap with reference box (0.0-1.0)
   
 roi:
-  threshold: 0.05                          # ROI weight threshold for deletion (lower = more permissive)
-  min_views: 3                             # Min views for Gaussian to be in ROI
+  threshold: 0.01                          # ROI weight threshold for deletion (lower = more aggressive removal)
+  min_views: 2                             # Min views for Gaussian to be in ROI (lower = more aggressive)
   
 inpainting:
   # Module 05a - Removal
   removal:
-    roi_threshold: 0.05                    # Which Gaussians to delete (same as ROI threshold)
+    roi_threshold: 0.01                    # Which Gaussians to delete (same as ROI threshold)
     
   # Module 05b - LaMa Inpainting (default method for clean object removal)
   
   # Module 05c - Optimization
   optimization:
-    iterations: 2000                       # Optimization iterations (increased for better quality)
+    iterations: 500                        # Optimization iterations (reduced to avoid over-fitting)
     densification:
       start_iter: 100                      # When to start densification
-      stop_iter: 1600                      # When to stop densification (80% of iterations)
-      grad_thresh: 0.0002                  # Gradient threshold for densification
+      stop_iter: 400                       # When to stop densification (80% of iterations)
+      grad_thresh: 0.0005                  # Gradient threshold for densification (higher = less aggressive)
       densify_every: 100                   # Densification frequency
     learning_rates:
-      means: 0.00016                       # Position learning rate
-      scales: 0.005                        # Scale learning rate
-      quats: 0.001                         # Rotation learning rate
-      opacities: 0.05                      # Opacity learning rate
-      sh0: 0.0025                          # SH DC component learning rate
-      shN: 0.0025                          # SH rest component learning rate
+      means: 0.00008                       # Position learning rate (reduced by half)
+      scales: 0.0025                       # Scale learning rate (reduced by half)
+      quats: 0.0005                        # Rotation learning rate (reduced by half)
+      opacities: 0.025                     # Opacity learning rate (reduced by half)
+      sh0: 0.00125                         # SH DC component learning rate (reduced by half)
+      shN: 0.00125                         # SH rest component learning rate (reduced by half)
 
 # Replacement-specific config (for modules 06-07)
 replacement:
@@ -100,13 +100,13 @@ replacement:
   
   # Module 06 - Object Placement
   placement:
-    object_gaussians: "GaussianDreamerResults/coffee_cup_pro.ply"  # Path to object Gaussians (.pt or .ply from external generation)
+    object_gaussians: "GaussianDreamerResults/cowboy_boots_pro.ply"  # Path to object Gaussians (.pt or .ply from external generation)
                                           # Example: "GaussianDreamerResults/your_object.ply"
                                           # Generate externally using GaussianDreamer/GaussianDreamerPro
     roi_file: "outputs/${project.name}/04_roi_extraction/roi.pt"  # ROI from Module 04a
     scene_gaussians: "outputs/${project.name}/05_scene_editing/05c_optimized/ckpt_patched.pt"  # Scene after removal from Module 05c
     alignment_method: "depth"              # depth, manual, or auto
-    scale: 0.2                             # Manual uniform scale multiplier
+    scale: 0.15                            # Manual uniform scale multiplier
     placement: "center"                    # center, bottom, or top
     xyz_offset: [0.0, 0.0, 0.1]           # XYZ offset in meters [x, y, z]
     rotation_degrees: 0.0                  # Rotation around Z-axis in degrees
