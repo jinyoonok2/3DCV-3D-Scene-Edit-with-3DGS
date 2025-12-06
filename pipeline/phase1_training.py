@@ -105,9 +105,10 @@ class Phase1Training(BasePhase):
             "--output_dir", str(self.phase_dir / "dataset_validation")
         ]
         
-        result = subprocess.run(cmd_check, capture_output=True, text=True, env=env, cwd=project_root)
+        # Stream output in real-time instead of capturing
+        result = subprocess.run(cmd_check, env=env, cwd=project_root)
         if result.returncode != 0:
-            console.print(f"[red]Dataset validation failed:[/red]\n{result.stderr}")
+            console.print(f"[red]Dataset validation failed[/red]")
             raise RuntimeError("Dataset validation failed")
         
         console.print("✓ Dataset validated\n")
@@ -123,9 +124,10 @@ class Phase1Training(BasePhase):
             "--output_dir", str(self.phase_dir)
         ]
         
-        result = subprocess.run(cmd_train, capture_output=True, text=True, env=env, cwd=project_root)
+        # Stream output in real-time
+        result = subprocess.run(cmd_train, env=env, cwd=project_root)
         if result.returncode != 0:
-            console.print(f"[red]Training failed:[/red]\n{result.stderr}")
+            console.print(f"[red]Training failed[/red]")
             raise RuntimeError("Training failed")
         
         console.print("✓ Training completed\n")
