@@ -45,6 +45,13 @@ class Phase1Training(BasePhase):
         self.eval_steps = config.get("training", "eval_steps", default=[7000, 30000])
         self.save_steps = config.get("training", "save_steps", default=[7000, 30000])
         
+        # Create subdirectories
+        (self.phase_dir / "dataset_validation").mkdir(exist_ok=True)
+        (self.phase_dir / "dataset_validation" / "thumbs").mkdir(exist_ok=True)
+        (self.phase_dir / "renders").mkdir(exist_ok=True)
+        (self.phase_dir / "checkpoints").mkdir(exist_ok=True)
+        (self.phase_dir / "metrics").mkdir(exist_ok=True)
+        
         self.metadata.update({
             "dataset_root": str(self.dataset_root),
             "factor": self.factor,
@@ -103,6 +110,11 @@ class Phase1Training(BasePhase):
         trainset = Dataset(parser_obj, split="train")
         
         console.print(f"✓ Loaded {len(trainset)} training images\n")
+        
+        # Save dataset validation outputs
+        console.print("[bold cyan]Saving dataset validation...[/bold cyan]")
+        self._save_dataset_validation(parser_obj, trainset, console)
+        console.print("✓ Dataset validation saved\n")
         
         # Initialize Gaussians from COLMAP points (using ParameterDict like legacy code)
         console.print("[bold cyan]Initializing 3D Gaussians...[/bold cyan]")
@@ -252,3 +264,48 @@ class Phase1Training(BasePhase):
         }
         
         return results
+    
+    def _save_dataset_validation(self, parser_obj, trainset, console):
+        """Save dataset thumbnails and summary like legacy code."""
+        import imageio.v2 as imageio
+        
+        val_dir = self.phase_dir / "dataset_validation"
+        thumbs_dir = val_dir / "thumbs"
+        
+        # Save thumbnails (sample 6 images)
+        num_thumbs = min(6, len(trainset))
+        indices = np.linspace(0, len(trainset)-1, num_thumbs, dtype=int)
+        
+        for i, idx in enumerate(indices):
+            data = trainset[idx]
+            image = data["image"]
+            imageio.imwrite(thumbs_dir / f"thumb_{i:02d}.png", image)
+        
+        console.print(f"  Saved {num_thumbs} thumbnails")
+        
+        # Write summary
+        summary_path = val_dir / "summary.txt"
+        with open(summary_path, 'w') as f:
+            f.write("=" * 80 + "\n")
+            f.write("Dataset Validation Summary\n")
+            f.write("=" * 80 + "\n\n")
+            f.write(f"Dataset root: {self.dataset_root}\n")
+            f.write(f"Downsample factor: {self.factor}\n")
+            f.write(f"Test every: {self.test_every}\n\n")
+            
+            f.write("Dataset Statistics:\n")
+            f.write(f"  Total images: {len(parser_obj.image_names)}\n")
+            f.write(f"  Training images: {len(trainset)}\n")
+            f.write(f"  COLMAP points: {len(parser_obj.points)}\n")
+            f.write(f"  Cameras: {len(parser_obj.Ks_dict)}\n\n")
+            
+            # Camera intrinsics
+            f.write("Camera Intrinsics:\n")
+            for cam_id, K in parser_obj.Ks_dict.items():
+                f.write(f"  Camera {cam_id}:\n")
+                f.write(f"    fx={K[0,0]:.2f}, fy={K[1,1]:.2f}\n")
+                f.write(f"    cx={K[0,2]:.2f}, cy={K[1,2]:.2f}\n")
+            
+            f.write("\n" + "=" * 80 + "\n")
+        
+        console.print(f"  Summary written to {summary_path.name}")
