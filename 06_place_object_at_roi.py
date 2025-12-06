@@ -301,7 +301,7 @@ def transform_object_to_roi(object_gaussians, roi_mask, scene_positions, args, c
     }
     
     console.print(f"✓ Object transformed: {len(final_positions)} Gaussians")
-    return transformed
+    return transformed, scale, xyz_offset
 
 
 def merge_gaussians(scene_gaussians, object_gaussians):
@@ -475,7 +475,7 @@ def main():
         roi_mask = roi_mask.get("roi_binary", roi_mask.get("roi_mask", roi_mask))
     
     # Transform object to ROI (using original scene positions for ROI bounds)
-    transformed_object = transform_object_to_roi(object_gaussians, roi_mask, original_gaussians["means"], args, config)
+    transformed_object, scale, xyz_offset = transform_object_to_roi(object_gaussians, roi_mask, original_gaussians["means"], args, config)
     
     # Merge with scene
     merged_gaussians = merge_gaussians(scene_gaussians, transformed_object)
