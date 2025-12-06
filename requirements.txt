@@ -11,6 +11,7 @@ pyyaml
 matplotlib
 scipy
 scikit-learn
+plyfile  # For loading PLY files
 
 # PyTorch ecosystem
 tensorboard

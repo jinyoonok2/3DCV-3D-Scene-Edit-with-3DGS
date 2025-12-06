@@ -126,10 +126,50 @@ def load_checkpoint(path, name="checkpoint"):
     try:
         # Check file extension
         if path.endswith('.ply'):
-            # Load PLY file using gsplat
-            from gsplat.load_ply import load_ply_as_gaussians
-            gaussians = load_ply_as_gaussians(path)
-            console.print(f"✓ {name} loaded from PLY")
+            # Load PLY file manually
+            from plyfile import PlyData
+            import numpy as np
+            
+            plydata = PlyData.read(path)
+            vertex = plydata['vertex']
+            
+            # Extract positions (xyz)
+            positions = np.stack([vertex['x'], vertex['y'], vertex['z']], axis=1)
+            
+            # Extract other properties if available
+            gaussians = {
+                "means": torch.from_numpy(positions).float(),
+            }
+            
+            # Try to extract scales (scale_0, scale_1, scale_2)
+            if 'scale_0' in vertex:
+                scales = np.stack([vertex['scale_0'], vertex['scale_1'], vertex['scale_2']], axis=1)
+                gaussians["scales"] = torch.from_numpy(scales).float()
+            
+            # Try to extract rotations (rot_0, rot_1, rot_2, rot_3 as quaternions)
+            if 'rot_0' in vertex:
+                quats = np.stack([vertex['rot_0'], vertex['rot_1'], vertex['rot_2'], vertex['rot_3']], axis=1)
+                gaussians["quats"] = torch.from_numpy(quats).float()
+            
+            # Try to extract opacities
+            if 'opacity' in vertex:
+                gaussians["opacities"] = torch.from_numpy(np.array(vertex['opacity'])).float().unsqueeze(-1)
+            
+            # Try to extract spherical harmonics (SH coefficients)
+            # Standard format: f_dc_0, f_dc_1, f_dc_2, f_rest_0, f_rest_1, ...
+            if 'f_dc_0' in vertex:
+                sh0 = np.stack([vertex['f_dc_0'], vertex['f_dc_1'], vertex['f_dc_2']], axis=1)
+                gaussians["sh0"] = torch.from_numpy(sh0).float()
+                
+                # Try to get rest of SH coefficients
+                sh_rest_names = [name for name in vertex.data.dtype.names if name.startswith('f_rest_')]
+                if sh_rest_names:
+                    sh_rest = np.stack([vertex[name] for name in sorted(sh_rest_names)], axis=1)
+                    # Reshape to (N, num_sh_rest, 3)
+                    num_rest = len(sh_rest_names) // 3
+                    gaussians["shN"] = torch.from_numpy(sh_rest).float().reshape(-1, num_rest, 3)
+            
+            console.print(f"✓ {name} loaded from PLY ({len(positions)} Gaussians)")
             return gaussians
         else:
             # Load PyTorch checkpoint
@@ -138,6 +178,8 @@ def load_checkpoint(path, name="checkpoint"):
             return ckpt
     except Exception as e:
         console.print(f"[red]Error loading {name}: {e}[/red]")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
 
 
