@@ -46,8 +46,8 @@ def parse_args():
     parser.add_argument(
         "--config",
         type=str,
-        default="config.yaml",
-        help="Path to config file (default: config.yaml)",
+        default="configs/garden_config.yaml",
+        help="Path to config file (default: configs/garden_config.yaml)",
     )
     parser.add_argument(
         "--ckpt",

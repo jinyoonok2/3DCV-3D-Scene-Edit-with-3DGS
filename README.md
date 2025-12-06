@@ -4,31 +4,42 @@ Text-guided 3D scene editing: **gsplat + SAM2 + GroundingDINO + TripoSR + SDXL**
 
 **Two-Phase Architecture:**
 - **Phase 1 - Object Removal** (00-05c): Train → Segment → Remove → Inpaint → Optimize
-- **Phase 2 - Object Generation** (06-09): Generate mesh → Convert to GS → Place at ROI → Optimize
+- **Phase 2 - Object Placement** (06-07): Place pre-generated Gaussians at ROI → Visualize
 
 ---
 
 ## Quick Start
 
+### Prerequisites
+- CUDA-capable GPU (tested on RTX 2060+, RTX 4090)
+- Conda or Mamba (recommended for faster installation)
+- CUDA toolkit 12.1+
+
 ### Setup
 ```bash
-# Clone and setup
+# Clone repository
 git clone https://github.com/jinyoonok2/3DCV-3D-Scene-Edit-with-3DGS
 cd 3DCV-3D-Scene-Edit-with-3DGS
 
-# Phase 1: Object Removal Environment
-./setup-removal.sh
-source activate-removal.sh
+# Download models and datasets (smart download - skips existing files)
+./download.sh all
+# or download separately:
+# ./download.sh models    # Models only (~1.5 GB)
+# ./download.sh datasets  # MipNeRF-360 dataset only (~10 GB extracted)
 
-# Phase 2: Object Generation Environment (optional)
-./setup-generation.sh  
-source activate-generation.sh
+# Setup conda environment
+./setup.sh
+
+# Activate environment
+source activate.sh
 ```
 
-### Phase 1: Object Removal Pipeline
+**Note**: The download script automatically checks for existing files and only downloads what's missing.
+
+### Object Removal Pipeline (Steps 00-05c)
 ```bash
-# Activate removal environment
-source activate-removal.sh
+# Activate environment
+source activate.sh
 
 # Initialize project config
 python init_project.py --scene garden --dataset_root datasets/360_v2/garden
@@ -41,59 +52,45 @@ python 03_ground_text_to_masks.py --text "brown plant"
 python 04a_lift_masks_to_roi3d.py
 python 04b_visualize_roi.py  # Optional visualization
 python 05a_remove_and_render_holes.py
-python 05b_inpaint_holes_sdxl.py
+python 05b_inpaint_holes.py
 python 05c_optimize_to_targets.py
 ```
 
-### Phase 2: Object Generation Pipeline (Future)
+### Object Placement Pipeline (Steps 06-07)
 ```bash
-# Activate generation environment  
-source activate-generation.sh
+# Generate object Gaussians externally (using GaussianDreamer/GaussianDreamerPro notebook)
+# The generated .ply file should be placed in the project directory
 
-# Run generation steps (placeholder commands)
-python 06_generate_objects_from_text.py
-python 07_convert_mesh_to_gaussians.py
-python 07_place_object_at_roi.py
-python 08_final_visualization.py
+# Place object in scene (uses configs/garden_config.yaml default or specify path)
+python 06_place_object_at_roi.py
+# or with custom object:
+python 06_place_object_at_roi.py --object_gaussians path/to/object.ply
+
+# Visualize final result
+python 07_final_visualization.py
 ```
 
 ---
 
 ## Architecture
 
-### gsplat Integration
-This project uses a hybrid approach for 3D Gaussian Splatting:
+### Environment Setup
+This project uses a **unified conda environment** for all pipeline steps:
 
-- **gsplat (pip)**: Core library installed via `pip install gsplat`
-  - Provides `gsplat.rasterization`, `gsplat.rendering`, `gsplat.strategy`
-  - Official, stable, optimized CUDA implementations
+- **Conda environment**: `3dgs-scene-edit`
+- **Setup script**: `./setup.sh` (supports `--reset` flag)
+- **Activation**: `source activate.sh` or `conda activate 3dgs-scene-edit`
+- **Dependencies**: Managed via `environment.yml`
 
-- **gsplat-src (integrated)**: Source repository examples for dataset parsing
-  - `datasets/colmap.py`: COLMAP data parser with pycolmap 0.6.1 compatibility
-  - `utils.py`: Helper functions (`knn`, `rgb_to_sh`, `set_random_seed`)
-  - `fused_ssim`: Optimized SSIM loss for training
-  - **Why needed**: pip gsplat doesn't include dataset parsers or training utilities
+**Key packages**:
+- PyTorch with CUDA 12.1
+- gsplat (3D Gaussian Splatting)
+- SAM2 (Segment Anything)
+- GroundingDINO (text-to-box detection)
+- LaMa (inpainting)
+- SDXL (diffusion models)
 
-**Path injection**: All scripts use `sys.path.insert(0, "gsplat-src/examples")` to access dataset parsers while using pip gsplat for core functionality.
-
-### Two-Phase Setup Architecture
-
-**Phase 1 - Object Removal (`setup-removal.sh`)**:
-- Creates `venv-removal/` environment
-- Installs: PyTorch, gsplat, SAM2, GroundingDINO, SDXL
-- Dependencies: `requirements.txt` + `requirements-gsplat.txt`
-- Handles steps 00-05c
-
-**Phase 2 - Object Generation (`setup-generation.sh`)**:
-- Creates `venv-generation/` by copying Phase 1 environment
-- Adds: TripoSR for 3D mesh generation
-- Dependencies: Phase 1 + `requirements-triposr.txt`
-- Handles steps 06-09
-
-**Environment Management**:
-- `source activate-removal.sh` - Activate Phase 1 environment
-- `source activate-generation.sh` - Activate Phase 2 environment
-- `--reset` flag available for both setup scripts (preserves datasets)
+**Object Generation**: Handled externally using GaussianDreamer/GaussianDreamerPro notebooks, not part of this environment.
 
 ---
 
@@ -101,12 +98,21 @@ This project uses a hybrid approach for 3D Gaussian Splatting:
 
 All modules support dual-mode operation: config file + CLI overrides.
 
-**Initialize:**
+### Config Files Location
+All configuration files are stored in the `configs/` directory:
+- **`configs/garden_config.yaml`**: Default config for garden scene (brown plant removal)
+- **`configs/environment.yml`**: Conda environment specification
+
+### Initialize Project
 ```bash
+# Uses default: configs/garden_config.yaml
 python init_project.py --scene garden --dataset_root datasets/360_v2/garden
+
+# Create custom config for different scene
+python init_project.py --scene bicycle --config configs/bicycle_config.yaml
 ```
 
-**Config structure** (`config.yaml`):
+**Config structure** (`configs/garden_config.yaml`):
 ```yaml
 scene: garden
 paths:
@@ -139,9 +145,9 @@ inpainting:
 **Note**: LaMa inpainting uses automatic hole detection and filling
 
 **Usage modes:**
-- Config-only: `python module.py`
+- Config-only: `python module.py` (uses `configs/garden_config.yaml` by default)
 - Override: `python module.py --param value`
-- Custom config: `python module.py --config exp2.yaml`
+- Custom config: `python module.py --config configs/my_experiment.yaml`
 
 ---
 
@@ -273,7 +279,7 @@ Fill holes using LaMa (default) or SDXL Inpainting.
 - Best for object removal tasks
 
 ```bash
-# Config-based (uses defaults from config.yaml)
+# Config-based (uses defaults from configs/garden_config.yaml)
 python 05b_inpaint_holes.py
 
 # With parameters (mask processing options)
@@ -377,15 +383,14 @@ python 05a_remove_and_render_holes.py
 python 05b_inpaint_holes.py
 python 05c_optimize_to_targets.py
 
-# Generate and place new object (Modules 06-09)
-python 06_object_generation.py --image flower.png
-python 07_mesh_to_gaussians.py --mesh outputs/garden/06_object_gen/mesh.ply --num_points 10000
-python 08_place_object_at_roi.py \
-  --object_gaussians outputs/garden/06_object_gen/gaussians.pt \
-  --roi outputs/garden/round_001/roi.pt \
-  --scene_gaussians outputs/garden/round_001/05c_optimized.pt \
+# Generate object externally (use GaussianDreamer/GaussianDreamerPro notebook)
+# This produces a .ply or .pt file with Gaussian splats
+
+# Place new object (Modules 06-07)
+python 06_place_object_at_roi.py \
+  --object_gaussians path/to/generated_object.ply \
   --placement bottom --scale_factor 0.8
-python 05c_optimize_to_targets.py --init_ckpt outputs/garden/round_001/merged_with_object.pt
+python 07_final_visualization.py
 ```
 
 ---
@@ -397,48 +402,41 @@ See original sections above for details.
 
 ---
 
-### 06. Object Generation
-Generate 3D mesh from image using TripoSR.
+### 06. Place Object at ROI
+Transform and merge externally-generated object Gaussians with scene at ROI location.
+
+**Prerequisites**: Generate object Gaussians externally using:
+- GaussianDreamer notebook for image-to-3DGS
+- GaussianDreamerPro notebook for enhanced quality
+- Save as `.ply` or `.pt` file
+
 ```bash
-python 06_object_generation.py --image flower.png
-```
-**Outputs**: `mesh.obj`, `mesh.ply`, `input_image.png`, `preview.png`
-
----
-
-### 07. Mesh to Gaussians
-Convert mesh to Gaussian splats by sampling surface points.
-```bash
-python 07_mesh_to_gaussians.py --mesh mesh.ply --num_points 10000
-```
-**Outputs**: `gaussians.pt` (Gaussian parameters)
-
----
-
-### 08. Place Object at ROI
-Transform and merge generated object with scene at ROI location.
-```bash
-python 08_place_object_at_roi.py \
-  --object_gaussians gaussians.pt \
-  --roi roi.pt \
-  --scene_gaussians scene.pt \
+python 06_place_object_at_roi.py \
+  --object_gaussians path/to/generated_object.ply \
   --placement bottom  # or center/top
 ```
 **Options**:
 - `--placement bottom`: Sits on surface (default)
 - `--scale_factor 0.8`: Size relative to ROI (default 80%)
-- `--z_offset 0.05`: Adjust height
-- `--rotation_degrees 45`: Rotate object
+- `--z_offset 0.05`: Adjust height in meters
+- `--rotation_degrees 45`: Rotate object around Z-axis
+- `--no_scale`: Keep original object size
+- `--manual_scale 2.0`: Manual scale multiplier
 
-**Outputs**: `merged_with_object.pt`
+**Outputs**: `merged_gaussians.pt` in `06_object_placement/`
 
 ---
 
-### 09. Final Optimization
-Use Module 05c to optimize merged scene:
+### 07. Final Visualization
+Render and evaluate the final merged scene.
 ```bash
-python 05c_optimize_to_targets.py --init_ckpt merged_with_object.pt
+python 07_final_visualization.py
 ```
+**Outputs**: 
+- `renders/`: Final scene renders
+- `comparisons/`: Before/after grids
+- `metrics.json`: Evaluation results
+- `summary_grid.png`: Overview visualization
 
 ---
 
@@ -449,9 +447,9 @@ python 05c_optimize_to_targets.py --init_ckpt merged_with_object.pt
 00 → 01 → 02 → 03 → 04a → 05a → 05b → 05c
 ```
 
-**Replace:**
+**Replace (with external object generation):**
 ```bash
-00 → 01 → 02 → 03 → 04a → 05a → 05b → 05c → 06 → 07 → 08 → 05c
+00 → 01 → 02 → 03 → 04a → 05a → 05b → 05c → [External: Generate Gaussians] → 06 → 07
 ```
 
 ---
@@ -674,36 +672,31 @@ python 04a_lift_masks_to_roi3d.py --roi_thresh 0.01 # For maximum inclusiveness
 │   ├── 04a_lift_masks_to_roi3d.py   # 2D masks → 3D ROI
 │   ├── 04b_visualize_roi.py         # ROI visualization
 │   ├── 05a_remove_and_render_holes.py  # Remove objects
-│   ├── 05b_inpaint_holes_sdxl.py    # Inpaint with SDXL
+│   ├── 05b_inpaint_holes.py         # Inpaint with LaMa
 │   └── 05c_optimize_to_targets.py   # Final optimization
 │
-├── Phase 2: Object Generation Pipeline (Future)
-│   ├── 06_generate_objects_from_text.py  # Text → 3D mesh
-│   ├── 07_convert_mesh_to_gaussians.py  # Mesh → Gaussians
-│   ├── 07_place_object_at_roi.py        # Place at ROI
-│   └── 08_final_visualization.py        # Final render
+├── Object Placement Pipeline (Steps 06-07)
+│   ├── 06_place_object_at_roi.py    # Place external Gaussians at ROI
+│   └── 07_final_visualization.py    # Final render & evaluation
 │
 ├── Setup & Environment
-│   ├── setup-removal.sh             # Phase 1 environment setup
-│   ├── setup-generation.sh          # Phase 2 environment setup
-│   ├── activate-removal.sh          # Activate Phase 1 env
-│   ├── activate-generation.sh       # Activate Phase 2 env
-│   ├── requirements.txt             # Core dependencies
-│   ├── requirements-gsplat.txt      # gsplat-src dependencies
-│   └── requirements-triposr.txt     # TripoSR dependencies
+│   ├── setup.sh                     # Conda environment setup
+│   ├── activate.sh                  # Activate conda environment
+│   └── download.sh                  # Download models & datasets
 │
 ├── Configuration & Utilities
-│   ├── init_project.py             # Initialize project config
-│   ├── config.yaml                 # Main configuration file
-│   ├── project_utils/              # Shared utilities
-│   └── download_datasets.sh        # Download MipNeRF-360
+│   ├── init_project.py              # Initialize project config
+│   ├── configs/
+│   │   ├── garden_config.yaml       # Garden scene configuration
+│   │   └── environment.yml          # Conda environment spec
+│   └── project_utils/               # Shared utilities
 │
 └── External Dependencies
-    ├── venv-removal/               # Phase 1 Python environment
-    ├── venv-generation/            # Phase 2 Python environment  
-    ├── gsplat-src/                 # gsplat source (dataset parsers)
-    ├── TripoSR/                    # TripoSR mesh generation
-    └── datasets/360_v2/            # MipNeRF-360 dataset
+    ├── models/                      # Model weights (GroundingDINO, SAM2)
+    ├── GroundingDINO/               # GroundingDINO config files
+    ├── GaussianDreamer/             # Pre-generated object Gaussians (.ply)
+    ├── gsplat-src/                  # gsplat source (dataset parsers)
+    └── datasets/360_v2/             # MipNeRF-360 dataset
 ```
 
 ---

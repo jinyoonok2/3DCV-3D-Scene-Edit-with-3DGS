@@ -65,7 +65,7 @@ except ImportError:
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Optimize 3DGS to match targets")
-    parser.add_argument("--config", type=str, default="config.yaml", help="Path to config file (default: config.yaml)")
+    parser.add_argument("--config", type=str, default="configs/garden_config.yaml", help="Path to config file (default: configs/garden_config.yaml)")
     parser.add_argument("--ckpt", type=str, default=None, help="Holed checkpoint from 05a (overrides config)")
     parser.add_argument("--targets_dir", type=str, default=None, help="Targets from 05b (overrides config)")
     parser.add_argument("--data_root", type=str, default=None, help="Dataset root (overrides config)")

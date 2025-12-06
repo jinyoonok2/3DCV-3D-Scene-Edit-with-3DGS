@@ -1,17 +1,17 @@
 # ============================================================================
-# 3DGS Scene Editing Pipeline - Configuration Template
+# 3DGS Scene Editing Pipeline - Garden Scene Configuration
 # ============================================================================
-# This is your main configuration file. Edit this before running the pipeline.
+# This is the configuration for the garden scene brown plant removal project.
 # All modules will read settings from this file.
 #
 # Quick start:
 #   1. Edit the settings below (especially project name and segmentation prompt)
-#   2. Run: python 00_check_dataset.py (uses config.yaml by default)
+#   2. Run: python 00_check_dataset.py (uses configs/garden_config.yaml by default)
 #   3. Continue with modules 01, 02, 03...
 #
 # For multiple projects, copy this file:
-#   cp config.yaml my_experiment.yaml
-#   python 00_check_dataset.py --config my_experiment.yaml
+#   cp configs/garden_config.yaml configs/my_experiment.yaml
+#   python 00_check_dataset.py --config configs/my_experiment.yaml
 # ============================================================================
 
 project:
@@ -34,9 +34,8 @@ paths:
   masks: "03_generated_masks"
   roi: "04_roi_extraction"
   inpainting: "05_scene_editing"
-  object_generation: "06_object_generation"    # For replacement pipeline
-  scene_placement: "07_object_placement"       # For replacement pipeline  
-  final_optimization: "08_final_optimization"  # For replacement pipeline
+  scene_placement: "06_object_placement"       # Object placement (Step 06)
+  final_visualization: "07_final_visualization"  # Final renders and evaluation (Step 07)
   logs: "00_pipeline_logs"                     # Central logging
 
 dataset:
@@ -95,32 +94,25 @@ inpainting:
       sh0: 0.0025                          # SH DC component learning rate
       shN: 0.0025                          # SH rest component learning rate
 
-# Replacement-specific config (for modules 06-09)
+# Replacement-specific config (for modules 06-07)
 replacement:
   enabled: true                            # Set to true for replacement pipeline
   
-  # Module 06 - Object Generation with GaussianDreamer
-  object_generation:
-    image_url: null                        # Input image URL (Google Drive or direct) - optional, can use text_prompt instead
-    gaussiandreamer:
-      num_points: 50000                    # Number of Gaussian splats to generate
-      iterations: 5000                     # Training iterations for generation
-      guidance_scale: 7.5                  # Classifier-free guidance scale
-      sh_degree: 3                         # Spherical harmonics degree
-      text_prompt: "a simple white coffee mug with a handle"  # Text prompt for text-to-3D generation
-  
-  # Module 07 - Object Placement
+  # Module 06 - Object Placement
   placement:
-    object_gaussians: "outputs/${project.name}/06_object_generation/gaussians.pt"  # Object Gaussians from Module 06 (GaussianDreamer)
+    object_gaussians: "GaussianDreamer/sugarfine_3Dgs5000_densityestim02_sdfnorm02_level03_decim1000000_normalconsistency03_gaussperface55.ply"
     roi_file: "outputs/${project.name}/04_roi_extraction/roi.pt"  # ROI from Module 04a
     scene_gaussians: "outputs/${project.name}/05_scene_editing/05c_optimized/ckpt_patched.pt"  # Scene after removal from Module 05c
     alignment_method: "depth"              # depth, manual, or auto
-    scale_factor: 1.0                      # Object scale adjustment
-    output_merged: "outputs/${project.name}/07_object_placement/merged_gaussians.pt"
+    scale_factor: 0.8                      # Object scale adjustment relative to ROI
+    placement: "bottom"                    # center, bottom, or top
+    z_offset: 0.0                          # Additional Z-axis offset in meters
+    rotation_degrees: 0.0                  # Rotation around Z-axis in degrees
+    output_merged: "outputs/${project.name}/06_object_placement/merged_gaussians.pt"
       
-  # Module 08 - Visualization & Evaluation
+  # Module 07 - Visualization & Evaluation
   visualization:
-    merged_checkpoint: "outputs/${project.name}/07_object_placement/merged_gaussians.pt"  # Merged scene from Module 07
+    merged_checkpoint: "outputs/${project.name}/06_object_placement/merged_gaussians.pt"  # Merged scene from Module 06
     original_checkpoint: "outputs/${project.name}/01_initial_training/ckpt_initial.pt"  # Original scene from Module 01
     metrics: ["clip", "lpips", "ssim", "psnr"]
     clip_model: "ViT-B/32"

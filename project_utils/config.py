@@ -14,7 +14,7 @@ import json
 class ProjectConfig:
     """Manages project configuration and directory structure"""
     
-    def __init__(self, config_path: str = "config.yaml"):
+    def __init__(self, config_path: str = "configs/garden_config.yaml"):
         """
         Load configuration from YAML file
         
@@ -334,7 +334,7 @@ class ProjectConfig:
         print()
 
 
-def create_default_config(output_path: str = "config.yaml", 
+def create_default_config(output_path: str = "configs/garden_config.yaml", 
                          project_name: str = "my_project",
                          scene: str = "garden",
                          text_prompt: str = "object"):
@@ -372,7 +372,7 @@ def create_default_config(output_path: str = "config.yaml",
 
 if __name__ == "__main__":
     # Test config loading
-    config = ProjectConfig("config.yaml")
+    config = ProjectConfig("configs/garden_config.yaml")
     config.print_structure()
     
     # Test path retrieval

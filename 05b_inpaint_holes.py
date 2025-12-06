@@ -43,7 +43,7 @@ console = Console()
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Inpaint holes with LaMa")
-    parser.add_argument("--config", type=str, default="config.yaml", help="Path to config file (default: config.yaml)")
+    parser.add_argument("--config", type=str, default="configs/garden_config.yaml", help="Path to config file (default: configs/garden_config.yaml)")
     parser.add_argument("--holed_dir", type=str, default=None, help="Directory from 05a (overrides config)")
     parser.add_argument("--output_dir", type=str, default=None, help="Output directory (overrides config)")
     parser.add_argument("--mask_blur", type=int, default=8, help="Mask blur radius (default: 8)")

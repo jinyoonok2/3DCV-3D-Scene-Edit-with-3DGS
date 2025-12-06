@@ -1,0 +1,67 @@
+name: 3dgs-scene-edit
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+
+dependencies:
+  # Python
+  - python=3.10
+  
+  # CUDA and PyTorch
+  - pytorch::pytorch>=2.0.0
+  - pytorch::torchvision
+  - pytorch::torchaudio
+  - pytorch::pytorch-cuda=12.1
+  
+  # Core dependencies
+  - numpy<2.0.0
+  - pillow>=9.5.0,<10.0.0
+  - imageio
+  - tqdm
+  - pyyaml
+  - matplotlib
+  - scikit-learn
+  - tensorboard
+  - tensorly
+  - scipy
+  
+  # Computer vision
+  - opencv
+  
+  # Pip packages that need to be installed via pip
+  - pip
+  - pip:
+    # gsplat (core library)
+    - gsplat
+    
+    # Diffusion models for inpainting
+    - diffusers
+    - transformers
+    - accelerate
+    
+    # LaMa inpainting
+    - simple-lama-inpainting
+    
+    # Segmentation
+    - groundingdino-py
+    - segment-anything-2
+    
+    # Metrics
+    - lpips
+    - torchmetrics[image]
+    
+    # Visualization and UI
+    - rich
+    - viser
+    - git+https://github.com/nerfstudio-project/nerfview@4538024fe0d15fd1a0e4d760f3695fc44ca72787
+    
+    # Dataset parsing (pycolmap)
+    - git+https://github.com/rmbrualla/pycolmap@cc7ea4b7301720ac29287dbe450952511b32125e
+    
+    # CLI
+    - tyro>=0.8.8
+    
+    # Splines
+    - splines

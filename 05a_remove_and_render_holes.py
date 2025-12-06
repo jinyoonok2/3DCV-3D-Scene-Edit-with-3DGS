@@ -60,7 +60,7 @@ except ImportError:
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Remove ROI and render holes")
-    parser.add_argument("--config", type=str, default="config.yaml", help="Path to config file (default: config.yaml)")
+    parser.add_argument("--config", type=str, default="configs/garden_config.yaml", help="Path to config file (default: configs/garden_config.yaml)")
     parser.add_argument("--ckpt", type=str, default=None, help="Path to 3DGS checkpoint (overrides config)")
     parser.add_argument("--roi", type=str, default=None, help="Path to ROI weights (overrides config)")
     parser.add_argument("--data_root", type=str, default=None, help="Dataset root (overrides config)")

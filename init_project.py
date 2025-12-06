@@ -2,10 +2,10 @@
 """
 Initialize a new 3DGS Scene Editing project (OPTIONAL HELPER)
 
-This is a convenience tool to quickly create a new config.yaml file.
-You can also manually copy and edit config.yaml instead.
+This is a convenience tool to quickly create a new configs/garden_config.yaml file.
+You can also manually copy and edit configs/garden_config.yaml instead.
 
-The config.yaml file lives in the ROOT directory, not in outputs/.
+The configs/garden_config.yaml file lives in the configs/ directory.
 """
 
 import argparse
@@ -41,7 +41,7 @@ Examples:
                        help='New object description (for replacement task)')
     parser.add_argument('--dataset', type=str,
                        help='Dataset root path (default: datasets/360_v2/{scene})')
-    parser.add_argument('--config', type=str, default='config.yaml',
+    parser.add_argument('--config', type=str, default='configs/garden_config.yaml',
                        help='Output config file path')
     parser.add_argument('--force', action='store_true',
                        help='Overwrite existing config file')
@@ -192,8 +192,8 @@ Examples:
     print(f"{'='*80}\n")
     print(f"1. Review/edit config: {args.config}")
     print(f"   nano {args.config}")
-    print(f"\n2. Run the pipeline (config.yaml is used by default):")
-    if args.config == "config.yaml":
+    print(f"\n2. Run the pipeline (configs/garden_config.yaml is used by default):")
+    if args.config == "configs/garden_config.yaml":
         print(f"   python 00_check_dataset.py")
         print(f"   python 01_train_gs_initial.py")
         print(f"   python 02_render_training_views.py")

@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """
-07_place_object_at_roi.py - Place Generated Object at ROI Location
+06_place_object_at_roi.py - Place Generated Object at ROI Location
 
 Goal: Transform and merge the generated Gaussian object into the scene at the ROI location.
 
 This module:
 1. Loads the ROI (Region of Interest) from Module 04a
-2. Loads the generated object Gaussians from Module 06
+2. Loads the pre-generated object Gaussians (from external notebook/PLY file)
 3. Loads the scene after object removal from Module 05c
 4. Transforms the object to fit the ROI (scale, rotation, translation)
 5. Merges object Gaussians with scene Gaussians
-6. Saves the combined scene for optimization in Module 08
+6. Saves the combined scene for visualization in Module 07
 
 Inputs:
-  --object_gaussians: Path to object Gaussians (.pt from Module 06)
+  --object_gaussians: Path to object Gaussians (.pt or .ply from external generation)
   --roi: Path to ROI file (.pt from Module 04a)
   --scene_gaussians: Path to scene after removal (.pt from Module 05c)
   --output: Path to save merged Gaussians
@@ -52,7 +52,7 @@ def parse_args():
     parser.add_argument(
         "--config",
         type=str,
-        default="config.yaml",
+        default="configs/garden_config.yaml",
         help="Path to config file",
     )
     parser.add_argument(
@@ -327,7 +327,7 @@ def main():
     args = parse_args()
     
     console.print("\n" + "="*80)
-    console.print("Module 07: Place Object at ROI")
+    console.print("Module 06: Place Object at ROI")
     console.print("="*80 + "\n")
     
     # Load config
@@ -417,7 +417,7 @@ def main():
     
     # Prepare metadata
     metadata = {
-        "module": "07_place_object_at_roi",
+        "module": "06_place_object_at_roi",
         "timestamp": datetime.now().isoformat(),
         "config_file": args.config,
         "inputs": {
@@ -449,10 +449,10 @@ def main():
     
     # Save manifest using unified system
     config = ProjectConfig(args.config)
-    config.save_manifest("07_place_object_at_roi", metadata)
+    config.save_manifest("06_place_object_at_roi", metadata)
     
-    console.print(f"\n[cyan]Next step:[/cyan] Run Module 08 to visualize the merged scene:")
-    console.print(f"  python 08_final_visualization.py \\")
+    console.print(f"\n[cyan]Next step:[/cyan] Run Module 07 to visualize the merged scene:")
+    console.print(f"  python 07_final_visualization.py \\")
     console.print(f"    --merged_ckpt {output_path} \\")
     console.print(f"    --data_root datasets/360_v2/garden")
 

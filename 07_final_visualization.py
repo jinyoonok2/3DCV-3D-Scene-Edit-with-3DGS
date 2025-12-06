@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-08_final_visualization.py - Final Scene Visualization and Evaluation
+07_final_visualization.py - Final Scene Visualization and Evaluation
 
-This module renders and evaluates the final merged scene from Module 07.
+This module renders and evaluates the final merged scene from Module 06.
 It creates comprehensive visualizations showing:
 - Rendered views of the final scene
 - Before/after comparisons 
@@ -11,11 +11,11 @@ It creates comprehensive visualizations showing:
 - Summary grid images
 
 Inputs:
-  --merged_ckpt: Path to merged scene checkpoint (from Module 07)
+  --merged_ckpt: Path to merged scene checkpoint (from Module 06)
   --original_ckpt: Path to original scene checkpoint (Module 01)
   --data_root: Dataset directory
 
-Outputs (saved in 08_final_visualization/):
+Outputs (saved in 07_final_visualization/):
   - renders/: Final scene renders from all viewpoints
   - comparisons/: Before/after comparison grids
   - metrics.json: Quantitative evaluation results
@@ -67,7 +67,7 @@ def parse_args():
     parser.add_argument(
         "--config",
         type=str,
-        default="config.yaml",
+        default="configs/garden_config.yaml",
         help="Path to config file",
     )
     parser.add_argument(
