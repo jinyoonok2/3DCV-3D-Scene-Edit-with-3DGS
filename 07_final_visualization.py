@@ -302,7 +302,7 @@ def main():
     if args.output_dir:
         output_dir = Path(args.output_dir)
     else:
-        output_dir = config.get_path('final_optimization')
+        output_dir = config.get_path('final_visualization')
     
     # Create output directories
     renders_dir = output_dir / "renders"

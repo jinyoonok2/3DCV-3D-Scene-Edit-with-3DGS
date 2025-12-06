@@ -219,7 +219,7 @@ class ProjectConfig:
         elif stage == 'merged':
             return self.get_path('scene_placement') / f'{prefix}merged.pt'
         elif stage == 'final':
-            return self.get_path('final_optimization') / f'{prefix}final.pt'
+            return self.get_path('final_visualization') / f'{prefix}final.pt'
         else:
             # Generic checkpoint in appropriate module
             return self.get_path('initial_training') / f'{prefix}{stage}.pt'
