@@ -9,30 +9,32 @@ dependencies:
   # Python
   - python=3.10
   
-  # CUDA and PyTorch
-  - pytorch::pytorch>=2.0.0
-  - pytorch::torchvision
-  - pytorch::torchaudio
+  # CUDA and PyTorch (minimal conda install)
+  - pytorch::pytorch=2.1.0
+  - pytorch::torchvision=0.16.0
+  - pytorch::torchaudio=2.1.0
   - pytorch::pytorch-cuda=12.1
   
-  # Core dependencies
-  - numpy<2.0.0
-  - pillow>=9.5.0,<10.0.0
-  - imageio
-  - tqdm
-  - pyyaml
-  - matplotlib
-  - scikit-learn
-  - tensorboard
-  - tensorly
-  - scipy
-  
-  # Computer vision
-  - opencv
-  
-  # Pip packages that need to be installed via pip
+  # Essential tools
   - pip
+  - git
+  - wget
+  - unzip
+  
+  # Pip packages (most dependencies via pip for faster solving)
   - pip:
+    # Core scientific computing
+    - numpy<2.0.0
+    - pillow<10.0.0
+    - imageio
+    - tqdm
+    - pyyaml
+    - matplotlib
+    - scikit-learn
+    - tensorboard
+    - scipy
+    - opencv-python
+    
     # gsplat (core library)
     - gsplat
     
@@ -65,3 +67,6 @@ dependencies:
     
     # Splines
     - splines
+    
+    # Google Drive downloads
+    - gdown
