@@ -104,7 +104,7 @@ class Phase1Training(BasePhase):
         
         console.print(f"✓ Loaded {len(trainset)} training images\n")
         
-        # Initialize Gaussians from COLMAP points
+        # Initialize Gaussians from COLMAP points (using ParameterDict like legacy code)
         console.print("[bold cyan]Initializing 3D Gaussians...[/bold cyan]")
         points = torch.from_numpy(parser_obj.points).float()
         rgbs = torch.from_numpy(parser_obj.points_rgb / 255.0).float()
@@ -115,18 +115,28 @@ class Phase1Training(BasePhase):
         scales = torch.log(dist_avg * 0.01).unsqueeze(-1).repeat(1, 3)
         
         N = points.shape[0]
-        means = torch.nn.Parameter(points.to(device))
-        scales = torch.nn.Parameter(scales.to(device))
-        quats = torch.nn.Parameter(torch.rand(N, 4, device=device))
-        opacities = torch.nn.Parameter(torch.logit(torch.full((N,), 0.1, device=device)))
+        quats = torch.rand((N, 4))
+        opacities = torch.logit(torch.full((N,), 0.1))
         
-        # Initialize SH from RGB
-        sh_coeffs = torch.zeros(N, (self.sh_degree + 1) ** 2, 3, device=device)
-        sh_coeffs[:, 0, :] = rgb_to_sh(rgbs.to(device))
-        sh_coeffs = torch.nn.Parameter(sh_coeffs)
+        # Initialize SH coefficients
+        colors = torch.zeros((N, (self.sh_degree + 1) ** 2, 3))
+        colors[:, 0, :] = rgb_to_sh(rgbs)
         
-        params = [means, scales, quats, opacities, sh_coeffs]
-        optimizers = [torch.optim.Adam([p], lr=1.6e-4 if i == 0 else 5e-3) for i, p in enumerate(params)]
+        # Create ParameterDict like legacy code
+        params = [
+            ("means", torch.nn.Parameter(points), 1.6e-4),
+            ("scales", torch.nn.Parameter(scales), 5e-3),
+            ("quats", torch.nn.Parameter(quats), 1e-3),
+            ("opacities", torch.nn.Parameter(opacities), 5e-2),
+            ("sh0", torch.nn.Parameter(colors[:, :1, :]), 2.5e-3),
+            ("shN", torch.nn.Parameter(colors[:, 1:, :]), 2.5e-3 / 20),
+        ]
+        
+        splats = torch.nn.ParameterDict({n: v for n, v, _ in params}).to(device)
+        optimizers = {
+            name: torch.optim.Adam([{"params": splats[name], "lr": lr, "name": name}])
+            for name, _, lr in params
+        }
         
         console.print(f"✓ Initialized {N} Gaussians\n")
         
@@ -163,13 +173,23 @@ class Phase1Training(BasePhase):
             pixels = data["image"].to(device) / 255.0  # [1, H, W, 3]
             height, width = pixels.shape[1:3]
             
-            # Render
+            # Render (using splats dict like legacy code)
+            means = splats["means"]
+            quats = splats["quats"]
+            scales = torch.exp(splats["scales"])
+            opacities = torch.sigmoid(splats["opacities"])
+            
+            # Concatenate SH coefficients
+            sh0 = splats["sh0"]  # [N, 1, 3]
+            shN = splats["shN"]  # [N, K-1, 3]
+            colors = torch.cat([sh0, shN], dim=1)  # [N, K, 3]
+            
             renders, alphas, info = rasterization(
                 means=means,
                 quats=quats / quats.norm(dim=-1, keepdim=True),
-                scales=torch.exp(scales),
-                opacities=torch.sigmoid(opacities),
-                colors=sh_coeffs,
+                scales=scales,
+                opacities=opacities,
+                colors=colors,
                 viewmats=torch.linalg.inv(camtoworlds),
                 Ks=Ks,
                 width=width,
@@ -177,26 +197,34 @@ class Phase1Training(BasePhase):
                 sh_degree=self.sh_degree,
             )
             
+            # Pre-backward step for strategy
+            strategy.step_pre_backward(
+                params=splats,
+                optimizers=optimizers,
+                state=strategy_state,
+                step=step,
+                info=info,
+            )
+            
             # Loss
             loss = torch.nn.functional.l1_loss(renders.permute(0, 3, 1, 2), pixels.permute(0, 3, 1, 2))
-            
-            # Backward
-            for opt in optimizers:
-                opt.zero_grad()
             loss.backward()
-            for opt in optimizers:
-                opt.step()
+            
+            # Optimize
+            for optimizer in optimizers.values():
+                optimizer.step()
+                optimizer.zero_grad(set_to_none=True)
             
             # Update progress
             if step % 100 == 0:
                 psnr = psnr_metric(renders.permute(0, 3, 1, 2), pixels.permute(0, 3, 1, 2))
                 pbar.set_postfix({"loss": f"{loss.item():.4f}", "psnr": f"{psnr.item():.2f}"})
             
-            # Densification
+            # Densification (post-backward step)
             if step < 15000 and step % 100 == 0:
                 strategy.step_post_backward(
-                    params={"means": means, "scales": scales, "quats": quats, "opacities": opacities, "sh0": sh_coeffs[:, 0, :], "shN": sh_coeffs[:, 1:, :]},
-                    optimizers=dict(zip(["means", "scales", "quats", "opacities", "sh0", "shN"], optimizers)),
+                    params=splats,
+                    optimizers=optimizers,
                     state=strategy_state,
                     step=step,
                     info=info,
@@ -208,21 +236,14 @@ class Phase1Training(BasePhase):
         # Save checkpoint
         console.print("[bold cyan]Saving checkpoint...[/bold cyan]")
         ckpt_path = self.phase_dir / "ckpt_initial.pt"
-        torch.save({
-            "means": means.detach().cpu(),
-            "scales": scales.detach().cpu(),
-            "quats": quats.detach().cpu(),
-            "opacities": opacities.detach().cpu(),
-            "sh_coeffs": sh_coeffs.detach().cpu(),
-            "sh_degree": self.sh_degree,
-        }, ckpt_path)
+        torch.save({"step": self.iterations, "splats": splats.state_dict()}, ckpt_path)
         console.print(f"✓ Checkpoint saved: {ckpt_path}\n")
         
         results = {
             "checkpoint": str(ckpt_path),
             "dataset_root": str(self.dataset_root),
             "num_iterations": self.iterations,
-            "num_gaussians": N,
+            "num_gaussians": len(splats["means"]),
         }
         
         return results
