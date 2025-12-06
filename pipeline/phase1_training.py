@@ -197,6 +197,9 @@ class Phase1Training(BasePhase):
                 width=width,
                 height=height,
                 sh_degree=self.sh_degree,
+                packed=False,
+                absgrad=True,
+                sparse_grad=False,
             )
             
             # Pre-backward step for strategy
