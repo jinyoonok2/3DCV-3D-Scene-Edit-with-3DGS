@@ -190,7 +190,7 @@ def get_bounds(positions):
     return min_bound, max_bound, center, size
 
 
-def transform_object_to_roi(object_gaussians, roi_mask, scene_positions, args):
+def transform_object_to_roi(object_gaussians, roi_mask, scene_positions, args, config):
     """Transform object Gaussians to fit ROI location and size."""
     console.print("\nTransforming object to ROI...")
     
@@ -475,7 +475,7 @@ def main():
         roi_mask = roi_mask.get("roi_binary", roi_mask.get("roi_mask", roi_mask))
     
     # Transform object to ROI (using original scene positions for ROI bounds)
-    transformed_object = transform_object_to_roi(object_gaussians, roi_mask, original_gaussians["means"], args)
+    transformed_object = transform_object_to_roi(object_gaussians, roi_mask, original_gaussians["means"], args, config)
     
     # Merge with scene
     merged_gaussians = merge_gaussians(scene_gaussians, transformed_object)
