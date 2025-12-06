@@ -62,7 +62,7 @@ except ImportError:
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Visualize and evaluate final merged scene"
+        description="Visualize and evaluate final merged scene with 4-stage comparison"
     )
     parser.add_argument(
         "--config",
@@ -73,7 +73,17 @@ def parse_args():
     parser.add_argument(
         "--merged_ckpt",
         type=str,
-        help="Path to merged scene checkpoint (from Module 07, auto-detected if not provided)",
+        help="Path to merged scene checkpoint (from Module 06, auto-detected if not provided)",
+    )
+    parser.add_argument(
+        "--optimized_ckpt",
+        type=str,
+        help="Path to optimized checkpoint (from Module 05c, auto-detected if not provided)",
+    )
+    parser.add_argument(
+        "--inpainted_ckpt",
+        type=str,
+        help="Path to inpainted checkpoint (from Module 05b, auto-detected if not provided)",
     )
     parser.add_argument(
         "--original_ckpt",
@@ -89,30 +99,6 @@ def parse_args():
         "--output_dir",
         type=str,
         help="Output directory (overrides config)",
-    )
-    parser.add_argument(
-        "--views",
-        type=str,
-        default="train",
-        help="Which views to render: 'all', 'train', 'val', or comma-separated indices (default: train)",
-    )
-    parser.add_argument(
-        "--num_views",
-        type=int,
-        default=10,
-        help="Maximum number of views to render (default: 10)",
-    )
-    parser.add_argument(
-        "--create_comparisons",
-        action="store_true",
-        default=True,
-        help="Create before/after comparison images (default: True)",
-    )
-    parser.add_argument(
-        "--summary_grid",
-        action="store_true",
-        default=True,
-        help="Create summary grid image (default: True)",
     )
     
     return parser.parse_args()
@@ -179,22 +165,35 @@ def render_view(params, camtoworld, K, width, height, device="cuda", sh_degree=3
     return render_colors.squeeze(0)  # Remove batch dimension
 
 
-def create_comparison_grid(original_img, merged_img, save_path):
-    """Create side-by-side comparison image."""
-    # Ensure images are same size
-    h, w = min(original_img.shape[0], merged_img.shape[0]), min(original_img.shape[1], merged_img.shape[1])
+def create_comparison_grid(original_img, inpainted_img, optimized_img, merged_img, save_path):
+    """Create 4-panel comparison image: Original | Inpainted | Optimized | With Object."""
+    # Ensure all images are same size
+    h = min(original_img.shape[0], inpainted_img.shape[0], optimized_img.shape[0], merged_img.shape[0])
+    w = min(original_img.shape[1], inpainted_img.shape[1], optimized_img.shape[1], merged_img.shape[1])
+    
     original_img = original_img[:h, :w]
+    inpainted_img = inpainted_img[:h, :w]
+    optimized_img = optimized_img[:h, :w]
     merged_img = merged_img[:h, :w]
     
-    # Create side-by-side comparison
-    comparison = np.hstack([original_img, merged_img])
+    # Create 2x2 grid
+    top_row = np.hstack([original_img, inpainted_img])
+    bottom_row = np.hstack([optimized_img, merged_img])
+    grid = np.vstack([top_row, bottom_row])
     
     # Add text labels
-    comparison = comparison.copy()
-    cv2.putText(comparison, "Original", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-    cv2.putText(comparison, "With Object", (w + 10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+    grid = grid.copy()
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.8
+    thickness = 2
+    color = (255, 255, 255)
     
-    cv2.imwrite(str(save_path), comparison)
+    cv2.putText(grid, "Original", (10, 30), font, font_scale, color, thickness)
+    cv2.putText(grid, "Inpainted", (w + 10, 30), font, font_scale, color, thickness)
+    cv2.putText(grid, "Optimized", (10, h + 30), font, font_scale, color, thickness)
+    cv2.putText(grid, "With Object", (w + 10, h + 30), font, font_scale, color, thickness)
+    
+    cv2.imwrite(str(save_path), grid)
 
 
 def compute_metrics(img1, img2):
@@ -262,40 +261,44 @@ def main():
     args = parse_args()
     
     console.print("\n" + "="*80)
-    console.print("Module 08: Final Scene Visualization & Evaluation") 
+    console.print("Module 07: Final Scene Visualization (4-Stage Comparison)") 
     console.print("="*80 + "\n")
     
     # Load config
     config = ProjectConfig(args.config)
-    viz_config = config.config.get('replacement', {}).get('visualization', {})
     project_name = config.get("project", "name")
     
-    # Setup paths
+    # Setup checkpoint paths
     if args.merged_ckpt:
         merged_ckpt = Path(args.merged_ckpt)
     else:
-        # Use config value
-        merged_config = viz_config.get('merged_checkpoint')
-        if merged_config:
-            merged_ckpt = Path(str(merged_config).replace('${project.name}', project_name))
-            console.print(f"[cyan]Using merged checkpoint from config:[/cyan] {merged_ckpt}")
-        else:
-            # Fallback to auto-detect
-            merged_ckpt = config.get_path('scene_placement') / 'merged_gaussians.pt'
-        if not merged_ckpt.exists():
-            console.print(f"[red]Merged checkpoint not found: {merged_ckpt}[/red]")
-            console.print("Run Module 07 first or provide --merged_ckpt")
-            sys.exit(1)
+        merged_ckpt = config.get_path('scene_placement') / 'merged_gaussians.pt'
+    
+    if args.optimized_ckpt:
+        optimized_ckpt = Path(args.optimized_ckpt)
+    else:
+        optimized_ckpt = config.get_path('inpainting') / '05c_optimized' / 'ckpt_final.pt'
+    
+    if args.inpainted_ckpt:
+        inpainted_ckpt = Path(args.inpainted_ckpt)
+    else:
+        inpainted_ckpt = config.get_path('inpainting') / '05b_inpainted' / 'ckpt_inpainted.pt'
     
     if args.original_ckpt:
         original_ckpt = Path(args.original_ckpt)
     else:
-        original_config = viz_config.get('original_checkpoint')
-        if original_config:
-            original_ckpt = Path(str(original_config).replace('${project.name}', project_name))
-            console.print(f"[cyan]Using original checkpoint from config:[/cyan] {original_ckpt}")
-        else:
-            original_ckpt = config.get_checkpoint_path('initial')
+        original_ckpt = config.get_checkpoint_path('initial')
+    
+    # Verify all checkpoints exist
+    for name, ckpt_path in [
+        ("Merged", merged_ckpt),
+        ("Optimized", optimized_ckpt),
+        ("Inpainted", inpainted_ckpt),
+        ("Original", original_ckpt)
+    ]:
+        if not ckpt_path.exists():
+            console.print(f"[red]{name} checkpoint not found: {ckpt_path}[/red]")
+            sys.exit(1)
     
     data_root = Path(args.data_root) if args.data_root else Path(config.get_path('dataset_root'))
     
@@ -304,104 +307,87 @@ def main():
     else:
         output_dir = config.get_path('final_visualization')
     
-    # Create output directories
-    renders_dir = output_dir / "renders"
+    # Create output directory (only comparisons, no individual renders)
     comparisons_dir = output_dir / "comparisons" 
-    renders_dir.mkdir(parents=True, exist_ok=True)
     comparisons_dir.mkdir(parents=True, exist_ok=True)
     
-    console.print(f"Merged checkpoint: {merged_ckpt}")
     console.print(f"Original checkpoint: {original_ckpt}")
+    console.print(f"Inpainted checkpoint: {inpainted_ckpt}")
+    console.print(f"Optimized checkpoint: {optimized_ckpt}")
+    console.print(f"Merged checkpoint: {merged_ckpt}")
     console.print(f"Data root: {data_root}")
-    console.print(f"Output: {output_dir}")
-    console.print(f"Views: {args.views} (max {args.num_views})\n")
+    console.print(f"Output: {output_dir}\n")
     
     device = "cuda" if torch.cuda.is_available() else "cpu"
     
-    # Load checkpoints
-    merged_params = load_checkpoint(merged_ckpt, device)
+    # Load all checkpoints
+    console.print("[cyan]Loading checkpoints...[/cyan]")
     original_params = load_checkpoint(original_ckpt, device)
+    inpainted_params = load_checkpoint(inpainted_ckpt, device)
+    optimized_params = load_checkpoint(optimized_ckpt, device)
+    merged_params = load_checkpoint(merged_ckpt, device)
+    console.print("✓ All checkpoints loaded\n")
     
-    # Load dataset
+    # Load dataset - ALL train + val views
     console.print("Loading dataset...")
     parser = Parser(data_root, factor=4, normalize=True, test_every=8)
+    train_dataset = Dataset(parser, split="train")
+    val_dataset = Dataset(parser, split="test")
     
-    if args.views == "all":
-        full_dataset = Dataset(parser, split="train") + Dataset(parser, split="test")
-    elif args.views == "val" or args.views == "test":
-        full_dataset = Dataset(parser, split="test")
-    elif args.views == "train":
-        full_dataset = Dataset(parser, split="train")
-    else:
-        # Comma-separated indices
-        indices = [int(x.strip()) for x in args.views.split(',')]
-        full_dataset = Dataset(parser, split="train")
+    # Combine all views
+    all_views = list(train_dataset) + list(val_dataset)
+    console.print(f"✓ Dataset loaded: {len(train_dataset)} train + {len(val_dataset)} val = {len(all_views)} total views\n")
     
-    # Limit number of views and convert to list
-    num_views_to_use = min(len(full_dataset), args.num_views)
-    
-    # Handle comma-separated indices case
-    if args.views not in ["all", "val", "test", "train"]:
-        indices = [int(x.strip()) for x in args.views.split(',')]
-        dataset = [full_dataset[i] for i in indices if i < len(full_dataset)][:num_views_to_use]
-    else:
-        dataset = [full_dataset[i] for i in range(num_views_to_use)]
-    
-    console.print(f"✓ Dataset loaded: {len(dataset)} views\n")
-    
-    # Render views
-    console.print("[cyan]Rendering views...[/cyan]")
-    rendered_paths = []
+    # Render all views
+    console.print("[cyan]Rendering all views...[/cyan]")
     comparison_paths = []
     all_metrics = []
     
-    for i, data in enumerate(tqdm(dataset, desc="Rendering")):
+    for i, data in enumerate(tqdm(all_views, desc="Rendering")):
         # Get camera parameters
         camtoworld = data["camtoworld"]
         K = data["K"] 
         height, width = data["image"].shape[:2]
         
-        # Render both scenes
+        # Render all 4 stages
         try:
-            merged_render = render_view(merged_params, camtoworld, K, width, height, device)
             original_render = render_view(original_params, camtoworld, K, width, height, device)
+            inpainted_render = render_view(inpainted_params, camtoworld, K, width, height, device)
+            optimized_render = render_view(optimized_params, camtoworld, K, width, height, device)
+            merged_render = render_view(merged_params, camtoworld, K, width, height, device)
         except Exception as e:
             console.print(f"[yellow]Warning: Failed to render view {i}: {e}[/yellow]")
             continue
         
-        # Convert to numpy
-        merged_img = (torch.clamp(merged_render, 0, 1).cpu().numpy() * 255).astype(np.uint8)
-        original_img = (torch.clamp(original_render, 0, 1).cpu().numpy() * 255).astype(np.uint8)
+        # Convert to numpy BGR for OpenCV
+        original_img = cv2.cvtColor((torch.clamp(original_render, 0, 1).cpu().numpy() * 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
+        inpainted_img = cv2.cvtColor((torch.clamp(inpainted_render, 0, 1).cpu().numpy() * 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
+        optimized_img = cv2.cvtColor((torch.clamp(optimized_render, 0, 1).cpu().numpy() * 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
+        merged_img = cv2.cvtColor((torch.clamp(merged_render, 0, 1).cpu().numpy() * 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
         
-        # Save renders
-        render_path = renders_dir / f"{i:05d}_merged.png"
-        original_path = renders_dir / f"{i:05d}_original.png"
-        cv2.imwrite(str(render_path), cv2.cvtColor(merged_img, cv2.COLOR_RGB2BGR))
-        cv2.imwrite(str(original_path), cv2.cvtColor(original_img, cv2.COLOR_RGB2BGR))
-        rendered_paths.append(str(render_path))
+        # Create 4-panel comparison (ONLY save this, no individual renders)
+        comparison_path = comparisons_dir / f"{i:05d}_comparison.png"
+        create_comparison_grid(original_img, inpainted_img, optimized_img, merged_img, comparison_path)
+        comparison_paths.append(str(comparison_path))
         
-        # Create comparison if requested
-        if args.create_comparisons:
-            comparison_path = comparisons_dir / f"{i:05d}_comparison.png"
-            create_comparison_grid(
-                cv2.cvtColor(original_img, cv2.COLOR_RGB2BGR),
-                cv2.cvtColor(merged_img, cv2.COLOR_RGB2BGR), 
-                comparison_path
-            )
-            comparison_paths.append(str(comparison_path))
-        
-        # Compute metrics
-        metrics = compute_metrics(original_img, merged_img)
+        # Compute metrics (original vs final merged)
+        metrics = compute_metrics(
+            cv2.cvtColor(original_img, cv2.COLOR_BGR2RGB),
+            cv2.cvtColor(merged_img, cv2.COLOR_BGR2RGB)
+        )
         metrics["view_index"] = i
         all_metrics.append(metrics)
     
-    console.print(f"✓ Rendered {len(rendered_paths)} views")
+    console.print(f"✓ Rendered {len(comparison_paths)} comparison grids")
     
-    # Create summary grid
-    if args.summary_grid and comparison_paths:
+    # Create summary grid (optional - select a few samples)
+    if comparison_paths:
         console.print("[cyan]Creating summary grid...[/cyan]")
         summary_path = output_dir / "summary_grid.png"
-        create_summary_grid(comparison_paths, summary_path)
+        # Sample 9 evenly spaced views for summary
+        sample_indices = np.linspace(0, len(comparison_paths)-1, min(9, len(comparison_paths)), dtype=int)
+        sample_paths = [comparison_paths[i] for i in sample_indices]
+        create_summary_grid(sample_paths, summary_path)
         console.print(f"✓ Summary grid: {summary_path}")
     
     # Compute aggregate metrics
@@ -410,6 +396,7 @@ def main():
         "mean_mse": np.mean([m["mse"] for m in all_metrics]),
         "mean_psnr": np.mean([m["psnr"] for m in all_metrics]),
         "mean_ssim": np.mean([m["ssim"] for m in all_metrics]),
+        "num_views": len(all_metrics),
         "per_view_metrics": all_metrics,
     }
     
@@ -423,49 +410,43 @@ def main():
     
     # Create manifest
     manifest = {
-        "module": "08_final_visualization",
+        "module": "07_final_visualization",
         "timestamp": datetime.now().isoformat(),
         "config_file": args.config,
         "inputs": {
-            "merged_checkpoint": str(merged_ckpt),
             "original_checkpoint": str(original_ckpt),
+            "inpainted_checkpoint": str(inpainted_ckpt),
+            "optimized_checkpoint": str(optimized_ckpt),
+            "merged_checkpoint": str(merged_ckpt),
             "data_root": str(data_root),
         },
-        "parameters": {
-            "views": args.views,
-            "num_views": args.num_views,
-            "create_comparisons": args.create_comparisons,
-            "summary_grid": args.summary_grid,
-        },
         "results": {
-            "num_views_rendered": len(rendered_paths),
-            "num_comparisons": len(comparison_paths),
+            "num_views_rendered": len(comparison_paths),
+            "num_train_views": len(train_dataset),
+            "num_val_views": len(val_dataset),
             "mean_psnr": avg_metrics['mean_psnr'],
             "mean_ssim": avg_metrics['mean_ssim'],
             "mean_mse": avg_metrics['mean_mse'],
         },
         "outputs": {
-            "renders_dir": str(renders_dir),
-            "comparisons_dir": str(comparisons_dir) if comparison_paths else None,
-            "summary_grid": str(output_dir / "summary_grid.png") if args.summary_grid else None,
+            "comparisons_dir": str(comparisons_dir),
+            "summary_grid": str(output_dir / "summary_grid.png") if comparison_paths else None,
             "metrics": str(metrics_path),
         },
     }
     
     # Save manifest using unified system
-    config.save_manifest("08_final_visualization", manifest)
+    config.save_manifest("07_final_visualization", manifest)
     
-    console.print(f"\n[green]✓ Module 08 complete![/green]")
+    console.print(f"\n[green]✓ Module 07 complete![/green]")
     console.print(f"📁 Output directory: {output_dir}")
-    console.print(f"🖼️  Renders: {len(rendered_paths)} images")
-    if comparison_paths:
-        console.print(f"🔄 Comparisons: {len(comparison_paths)} before/after images")
+    console.print(f"🖼️  Comparison grids: {len(comparison_paths)} images (4-panel: Original|Inpainted|Optimized|With Object)")
     if args.summary_grid:
-        console.print(f"📊 Summary grid: summary_grid.png")
-    
+    console.print(f"📊 Summary grid: summary_grid.png")
+    console.print(f"\n[cyan]💡 To create GIF from comparisons:[/cyan]")
+    console.print(f"  ffmpeg -framerate 10 -pattern_type glob -i '{comparisons_dir}/*.png' -vf scale=1920:-1 {output_dir}/animation.gif")
     console.print(f"\n[cyan]View results:[/cyan]")
-    console.print(f"  ls {output_dir}")
-    console.print(f"  open {output_dir}/summary_grid.png")
+    console.print(f"  ls {comparisons_dir}")
     console.print()
 
 
