@@ -219,17 +219,25 @@ def transform_object_to_roi(object_gaussians, roi_mask, scene_positions, args):
     # 1. Center object at origin
     centered_positions = obj_positions - obj_center
     
-    # 2. Scale object
+    # 2. Scale object to fit INSIDE the ROI
     if args.no_scale:
         # Use manual scale only (no ROI-based auto-scaling)
         scale = args.manual_scale
         console.print(f"Manual scale: {scale:.4f} (no ROI auto-scaling)")
     else:
-        # Auto-scale to fit ROI
-        obj_max_dim = obj_size.max()
-        roi_max_dim = roi_size.max()
-        scale = (roi_max_dim / obj_max_dim) * args.scale_factor
-        console.print(f"Auto-scale to fit ROI: {scale:.4f}")
+        # Auto-scale to fit ROI - use the dimension that requires the most scaling
+        # This ensures object fits in ALL dimensions
+        scale_x = roi_size[0] / obj_size[0] if obj_size[0] > 0 else 1.0
+        scale_y = roi_size[1] / obj_size[1] if obj_size[1] > 0 else 1.0
+        scale_z = roi_size[2] / obj_size[2] if obj_size[2] > 0 else 1.0
+        
+        # Take the minimum to ensure it fits in all dimensions
+        auto_scale = min(scale_x.item(), scale_y.item(), scale_z.item())
+        scale = auto_scale * args.scale_factor
+        
+        console.print(f"Auto-scale to fit ROI:")
+        console.print(f"  Scale X: {scale_x.item():.4f}, Y: {scale_y.item():.4f}, Z: {scale_z.item():.4f}")
+        console.print(f"  Using minimum: {auto_scale:.4f} × scale_factor({args.scale_factor}) = {scale:.4f}")
     
     scaled_positions = centered_positions * scale
     scaled_scales = object_gaussians["scales"] + np.log(scale)  # Scales are in log space
