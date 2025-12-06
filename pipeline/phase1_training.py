@@ -294,6 +294,7 @@ class Phase1Training(BasePhase):
     def _save_dataset_validation(self, parser_obj, trainset, console):
         """Save dataset thumbnails and summary like legacy code."""
         import imageio.v2 as imageio
+        import numpy as np
         
         val_dir = self.phase_dir / "00_dataset_validation"
         thumbs_dir = val_dir / "thumbs"
