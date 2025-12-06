@@ -106,7 +106,7 @@ replacement:
     roi_file: "outputs/${project.name}/04_roi_extraction/roi.pt"  # ROI from Module 04a
     scene_gaussians: "outputs/${project.name}/05_scene_editing/05c_optimized/ckpt_patched.pt"  # Scene after removal from Module 05c
     alignment_method: "depth"              # depth, manual, or auto
-    scale: 0.03                             # Manual uniform scale multiplier
+    scale: 0.1                             # Manual uniform scale multiplier
     placement: "center"                    # center, bottom, or top
     xyz_offset: [0.0, 0.0, 0.004]           # XYZ offset in meters [x, y, z]
     rotation_degrees: 0.0                  # Rotation around Z-axis in degrees
