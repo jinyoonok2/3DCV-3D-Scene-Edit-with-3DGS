@@ -81,34 +81,32 @@ def parse_args():
         help="Output path for merged Gaussians (.pt file)",
     )
     parser.add_argument(
-        "--scale_factor",
+        "--scale",
         type=float,
-        default=0.8,
-        help="Scale factor for object size relative to ROI (default: 0.8). Ignored if --no_scale is set.",
-    )
-    parser.add_argument(
-        "--no_scale",
-        action="store_true",
-        help="Do not auto-scale object to fit ROI. Object keeps original size (or use --manual_scale).",
-    )
-    parser.add_argument(
-        "--manual_scale",
-        type=float,
-        default=1.0,
-        help="Manual uniform scale multiplier when --no_scale is set (default: 1.0)",
+        default=None,
+        help="Manual uniform scale multiplier (default: from config or 0.2)",
     )
     parser.add_argument(
         "--placement",
         type=str,
-        choices=["center", "bottom", "top"],
+        choices=["center", "bottom", "top", "manual"],
         default="bottom",
-        help="Placement strategy: center (middle of ROI), bottom (on surface), top (hanging)",
+        help="Placement strategy: center (middle of ROI), bottom (on surface), top (hanging), manual (use --position)",
     )
     parser.add_argument(
-        "--z_offset",
+        "--position",
         type=float,
-        default=0.0,
-        help="Additional Z-axis offset in meters (default: 0.0)",
+        nargs=3,
+        metavar=('X', 'Y', 'Z'),
+        help="Manual position [x, y, z] in world coordinates (only with --placement manual)",
+    )
+    parser.add_argument(
+        "--xyz_offset",
+        type=float,
+        nargs=3,
+        default=None,
+        metavar=('X', 'Y', 'Z'),
+        help="XYZ offset in meters [x, y, z] (default: from config or [0, 0, 0])",
     )
     parser.add_argument(
         "--rotation_degrees",
@@ -219,25 +217,14 @@ def transform_object_to_roi(object_gaussians, roi_mask, scene_positions, args):
     # 1. Center object at origin
     centered_positions = obj_positions - obj_center
     
-    # 2. Scale object to fit INSIDE the ROI
-    if args.no_scale:
-        # Use manual scale only (no ROI-based auto-scaling)
-        scale = args.manual_scale
-        console.print(f"Manual scale: {scale:.4f} (no ROI auto-scaling)")
+    # 2. Apply manual scale
+    # Get scale from args or config
+    if args.scale is None:
+        scale = config.get('placement', {}).get('scale', 0.2)
+        console.print(f"Using scale from config: {scale:.4f}")
     else:
-        # Auto-scale to fit ROI - use the dimension that requires the most scaling
-        # This ensures object fits in ALL dimensions
-        scale_x = roi_size[0] / obj_size[0] if obj_size[0] > 0 else 1.0
-        scale_y = roi_size[1] / obj_size[1] if obj_size[1] > 0 else 1.0
-        scale_z = roi_size[2] / obj_size[2] if obj_size[2] > 0 else 1.0
-        
-        # Take the minimum to ensure it fits in all dimensions
-        auto_scale = min(scale_x.item(), scale_y.item(), scale_z.item())
-        scale = auto_scale * args.scale_factor
-        
-        console.print(f"Auto-scale to fit ROI:")
-        console.print(f"  Scale X: {scale_x.item():.4f}, Y: {scale_y.item():.4f}, Z: {scale_z.item():.4f}")
-        console.print(f"  Using minimum: {auto_scale:.4f} × scale_factor({args.scale_factor}) = {scale:.4f}")
+        scale = args.scale
+        console.print(f"Using manual scale: {scale:.4f}")
     
     scaled_positions = centered_positions * scale
     scaled_scales = object_gaussians["scales"] + np.log(scale)  # Scales are in log space
@@ -256,7 +243,14 @@ def transform_object_to_roi(object_gaussians, roi_mask, scene_positions, args):
         console.print(f"Applied rotation: {args.rotation_degrees}°")
     
     # 4. Translate to ROI position
-    if args.placement == "bottom":
+    if args.placement == "manual":
+        # Manual position override
+        if args.position is None:
+            console.print("[red]Error: --position required when using --placement manual[/red]")
+            sys.exit(1)
+        target_center = torch.tensor(args.position, dtype=torch.float32)
+        console.print(f"Manual placement at: {target_center.numpy()}")
+    elif args.placement == "bottom":
         # Place object at bottom of ROI (on surface)
         # Use percentile instead of min to avoid ground-level outliers
         roi_z_coords = roi_positions[:, 2]
@@ -275,14 +269,26 @@ def transform_object_to_roi(object_gaussians, roi_mask, scene_positions, args):
         # Place object at center of ROI
         target_center = roi_center
     
-    # Apply Z offset
-    target_center[2] += args.z_offset
+    # Apply XY offset
+    # Apply XYZ offset
+    # Get offset from args or config
+    if args.xyz_offset is None:
+        xyz_offset = config.get('placement', {}).get('xyz_offset', [0.0, 0.0, 0.0])
+        console.print(f"Using XYZ offset from config: {xyz_offset}")
+    else:
+        xyz_offset = args.xyz_offset
+        console.print(f"Using manual XYZ offset: {xyz_offset}")
+    
+    target_center[0] += xyz_offset[0]
+    target_center[1] += xyz_offset[1]
+    target_center[2] += xyz_offset[2]
     
     final_positions = scaled_positions + target_center
     
     console.print(f"Placement: {args.placement}")
-    console.print(f"Target center: {target_center.numpy()}")
-    console.print(f"Z offset: {args.z_offset:.4f}m")
+    console.print(f"Final target center: {target_center.numpy()}")
+    if any(offset != 0 for offset in xyz_offset):
+        console.print(f"Applied offset: [{xyz_offset[0]:.4f}, {xyz_offset[1]:.4f}, {xyz_offset[2]:.4f}]m")
     
     # Create transformed Gaussians
     transformed = {
@@ -498,12 +504,10 @@ def main():
             "original_scene": str(args.original_scene) if args.original_scene else "inferred from config",
         },
         "parameters": {
-            "scale_factor": args.scale_factor,
+            "scale": scale,
             "placement": args.placement,
-            "z_offset": args.z_offset,
+            "xyz_offset": xyz_offset,
             "rotation_degrees": args.rotation_degrees,
-            "no_scale": args.no_scale,
-            "manual_scale": args.manual_scale,
         },
         "results": {
             "num_scene_gaussians": len(scene_gaussians["means"]),
