@@ -48,7 +48,7 @@ dependencies:
     
     # Segmentation
     - groundingdino-py
-    - segment-anything-2
+    - sam2
     
     # Metrics
     - lpips
