@@ -87,26 +87,12 @@ def parse_args():
         help="Manual uniform scale multiplier (default: from config or 0.2)",
     )
     parser.add_argument(
-        "--placement",
-        type=str,
-        choices=["center", "bottom", "top", "manual"],
-        default="bottom",
-        help="Placement strategy: center (middle of ROI), bottom (on surface), top (hanging), manual (use --position)",
-    )
-    parser.add_argument(
-        "--position",
-        type=float,
-        nargs=3,
-        metavar=('X', 'Y', 'Z'),
-        help="Manual position [x, y, z] in world coordinates (only with --placement manual)",
-    )
-    parser.add_argument(
         "--xyz_offset",
         type=float,
         nargs=3,
         default=None,
         metavar=('X', 'Y', 'Z'),
-        help="XYZ offset in meters [x, y, z] (default: from config or [0, 0, 0])",
+        help="XYZ offset from ROI center in meters [x, y, z] (default: from config or [0, 0, 0])",
     )
     parser.add_argument(
         "--rotation_degrees",
@@ -242,35 +228,9 @@ def transform_object_to_roi(object_gaussians, roi_mask, scene_positions, args, c
         scaled_positions = scaled_positions @ rot_matrix.T
         console.print(f"Applied rotation: {args.rotation_degrees}°")
     
-    # 4. Translate to ROI position
-    if args.placement == "manual":
-        # Manual position override
-        if args.position is None:
-            console.print("[red]Error: --position required when using --placement manual[/red]")
-            sys.exit(1)
-        target_center = torch.tensor(args.position, dtype=torch.float32)
-        console.print(f"Manual placement at: {target_center.numpy()}")
-    elif args.placement == "bottom":
-        # Place object at bottom of ROI (on surface)
-        # Use percentile instead of min to avoid ground-level outliers
-        roi_z_coords = roi_positions[:, 2]
-        roi_bottom = torch.quantile(roi_z_coords, 0.1)  # 10th percentile instead of minimum
-        target_center = roi_center.clone()
-        target_center[2] = roi_bottom + (scaled_positions[:, 2].max() - scaled_positions[:, 2].min()) / 2
-        console.print(f"Using 10th percentile Z ({roi_bottom:.4f}) instead of min ({roi_min[2]:.4f}) to avoid outliers")
-    elif args.placement == "top":
-        # Place object at top of ROI
-        roi_z_coords = roi_positions[:, 2]
-        roi_top = torch.quantile(roi_z_coords, 0.9)  # 90th percentile instead of maximum
-        target_center = roi_center.clone()
-        target_center[2] = roi_top - (scaled_positions[:, 2].max() - scaled_positions[:, 2].min()) / 2
-        console.print(f"Using 90th percentile Z ({roi_top:.4f}) instead of max ({roi_max[2]:.4f}) to avoid outliers")
-    else:  # center
-        # Place object at center of ROI
-        target_center = roi_center
+    # 4. Start at ROI center, then apply XYZ offset
+    target_center = roi_center.clone()
     
-    # Apply XY offset
-    # Apply XYZ offset
     # Get offset from args or config
     if args.xyz_offset is None:
         xyz_offset = config.config.get('replacement', {}).get('placement', {}).get('xyz_offset', [0.0, 0.0, 0.0])
@@ -285,10 +245,9 @@ def transform_object_to_roi(object_gaussians, roi_mask, scene_positions, args, c
     
     final_positions = scaled_positions + target_center
     
-    console.print(f"Placement: {args.placement}")
+    console.print(f"ROI center: {roi_center.numpy()}")
     console.print(f"Final target center: {target_center.numpy()}")
-    if any(offset != 0 for offset in xyz_offset):
-        console.print(f"Applied offset: [{xyz_offset[0]:.4f}, {xyz_offset[1]:.4f}, {xyz_offset[2]:.4f}]m")
+    console.print(f"Applied XYZ offset: [{xyz_offset[0]:.4f}, {xyz_offset[1]:.4f}, {xyz_offset[2]:.4f}]m")
     
     # Create transformed Gaussians
     transformed = {
@@ -406,13 +365,6 @@ def main():
     config = ProjectConfig(args.config)
     placement_config = config.config.get('replacement', {}).get('placement', {})
     project_name = config.get("project", "name")
-    
-    # Override placement mode from config if not explicitly provided via CLI
-    if args.placement == "bottom":  # Check if it's still the default value
-        config_placement = placement_config.get('placement', 'bottom')
-        if config_placement != 'bottom':
-            args.placement = config_placement
-            console.print(f"[cyan]Using placement mode from config:[/cyan] {config_placement}")
     
     # Get paths from config or CLI
     if args.object_gaussians:
