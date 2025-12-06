@@ -121,12 +121,21 @@ def parse_args():
 
 
 def load_checkpoint(path, name="checkpoint"):
-    """Load checkpoint file."""
+    """Load checkpoint file (.pt or .ply)."""
     console.print(f"Loading {name}: {path}")
     try:
-        ckpt = torch.load(path, map_location="cpu")
-        console.print(f"✓ {name} loaded")
-        return ckpt
+        # Check file extension
+        if path.endswith('.ply'):
+            # Load PLY file using gsplat
+            from gsplat.load_ply import load_ply_as_gaussians
+            gaussians = load_ply_as_gaussians(path)
+            console.print(f"✓ {name} loaded from PLY")
+            return gaussians
+        else:
+            # Load PyTorch checkpoint
+            ckpt = torch.load(path, map_location="cpu", weights_only=False)
+            console.print(f"✓ {name} loaded")
+            return ckpt
     except Exception as e:
         console.print(f"[red]Error loading {name}: {e}[/red]")
         sys.exit(1)
@@ -389,7 +398,12 @@ def main():
         original_gaussians = original_ckpt.get("splats", original_ckpt.get("gaussians", original_ckpt))
     
     # Extract Gaussians from checkpoints
-    object_gaussians = object_ckpt.get("gaussians", object_ckpt)
+    # Object can be PLY (dict from load_ply_as_gaussians) or checkpoint dict
+    if object_path.endswith('.ply'):
+        object_gaussians = object_ckpt  # Already in correct format from load_ply_as_gaussians
+    else:
+        object_gaussians = object_ckpt.get("gaussians", object_ckpt)
+    
     # Scene checkpoint can have "splats" or "gaussians" key
     scene_gaussians = scene_ckpt.get("splats", scene_ckpt.get("gaussians", scene_ckpt))
     
