@@ -133,7 +133,7 @@ class Phase1Training(BasePhase):
         # Training loop
         console.print(f"[bold cyan]Training for {self.iterations} iterations...[/bold cyan]")
         strategy = DefaultStrategy()
-        psnr_metric = PeakSignalNoiseRatio().to(device)
+        psnr_metric = PeakSignalNoiseRatio(data_range=1.0).to(device)
         
         pbar = tqdm(range(self.iterations), desc="Training")
         for step in pbar:

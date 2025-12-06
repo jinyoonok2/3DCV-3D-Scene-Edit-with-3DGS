@@ -32,8 +32,14 @@ class ProjectConfig:
         # Resolve project name in paths
         self._resolve_paths()
         
-        # Create directory structure
-        self._create_directories()
+        # Only create directories for legacy configs (ones that have old path keys)
+        if self._is_legacy_config():
+            self._create_directories()
+    
+    def _is_legacy_config(self):
+        """Check if this is a legacy config (has numbered module paths)."""
+        legacy_keys = ['dataset_check', 'initial_training', 'renders', 'masks', 'roi', 'inpainting']
+        return any(key in self.config.get('paths', {}) for key in legacy_keys)
         
     def _resolve_paths(self):
         """Resolve ${project.name} variables in paths"""
