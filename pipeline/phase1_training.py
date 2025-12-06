@@ -288,7 +288,6 @@ class Phase1Training(BasePhase):
             "num_gaussians": len(splats["means"]),
             "metrics": metrics_dict,
         }
-        }
         
         return results
     
