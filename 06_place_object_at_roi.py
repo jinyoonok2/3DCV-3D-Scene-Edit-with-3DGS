@@ -258,12 +258,19 @@ def transform_object_to_roi(object_gaussians, roi_mask, scene_positions, args):
     # 4. Translate to ROI position
     if args.placement == "bottom":
         # Place object at bottom of ROI (on surface)
+        # Use percentile instead of min to avoid ground-level outliers
+        roi_z_coords = roi_positions[:, 2]
+        roi_bottom = torch.quantile(roi_z_coords, 0.1)  # 10th percentile instead of minimum
         target_center = roi_center.clone()
-        target_center[2] = roi_min[2] + (scaled_positions[:, 2].max() - scaled_positions[:, 2].min()) / 2
+        target_center[2] = roi_bottom + (scaled_positions[:, 2].max() - scaled_positions[:, 2].min()) / 2
+        console.print(f"Using 10th percentile Z ({roi_bottom:.4f}) instead of min ({roi_min[2]:.4f}) to avoid outliers")
     elif args.placement == "top":
         # Place object at top of ROI
+        roi_z_coords = roi_positions[:, 2]
+        roi_top = torch.quantile(roi_z_coords, 0.9)  # 90th percentile instead of maximum
         target_center = roi_center.clone()
-        target_center[2] = roi_max[2] - (scaled_positions[:, 2].max() - scaled_positions[:, 2].min()) / 2
+        target_center[2] = roi_top - (scaled_positions[:, 2].max() - scaled_positions[:, 2].min()) / 2
+        console.print(f"Using 90th percentile Z ({roi_top:.4f}) instead of max ({roi_max[2]:.4f}) to avoid outliers")
     else:  # center
         # Place object at center of ROI
         target_center = roi_center
