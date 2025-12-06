@@ -82,8 +82,18 @@ class Phase1Training(BasePhase):
         
         console.print("[bold cyan]Step 1/2: Validating dataset...[/bold cyan]")
         
-        # Run legacy dataset validation script
+        # Run legacy dataset validation script with proper environment
         legacy_check = Path(__file__).parent.parent / "legacy" / "00_check_dataset.py"
+        
+        # Set up environment to include gsplat path
+        import os
+        env = os.environ.copy()
+        gsplat_path = str(Path(__file__).parent.parent / "gsplat-src" / "examples")
+        if 'PYTHONPATH' in env:
+            env['PYTHONPATH'] = f"{gsplat_path}:{env['PYTHONPATH']}"
+        else:
+            env['PYTHONPATH'] = gsplat_path
+        
         cmd_check = [
             sys.executable,
             str(legacy_check),
@@ -91,7 +101,7 @@ class Phase1Training(BasePhase):
             "--output_dir", str(self.phase_dir / "dataset_validation")
         ]
         
-        result = subprocess.run(cmd_check, capture_output=True, text=True)
+        result = subprocess.run(cmd_check, capture_output=True, text=True, env=env, cwd=str(Path(__file__).parent.parent))
         if result.returncode != 0:
             console.print(f"[red]Dataset validation failed:[/red]\n{result.stderr}")
             raise RuntimeError("Dataset validation failed")
@@ -109,7 +119,7 @@ class Phase1Training(BasePhase):
             "--output_dir", str(self.phase_dir)
         ]
         
-        result = subprocess.run(cmd_train, capture_output=True, text=True)
+        result = subprocess.run(cmd_train, capture_output=True, text=True, env=env, cwd=str(Path(__file__).parent.parent))
         if result.returncode != 0:
             console.print(f"[red]Training failed:[/red]\n{result.stderr}")
             raise RuntimeError("Training failed")
