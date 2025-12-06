@@ -26,6 +26,10 @@ cd 3DCV-3D-Scene-Edit-with-3DGS
 # or download separately:
 # ./download.sh models    # Models only (~1.5 GB)
 # ./download.sh datasets  # MipNeRF-360 dataset only (~10 GB extracted)
+# ./download.sh gdrive    # GaussianDreamerResults from Google Drive
+# or download separately:
+# ./download.sh models    # Models only (~1.5 GB)
+# ./download.sh datasets  # MipNeRF-360 dataset only (~10 GB extracted)
 
 # Setup conda environment
 ./setup.sh

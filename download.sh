@@ -1,26 +1,31 @@
 #!/bin/bash
-# Unified download script for models and datasets
-# Usage: ./download.sh [models|datasets|all]
+# Unified download script for models, datasets, and GaussianDreamer results
+# Usage: ./download.sh [models|datasets|gdrive|all]
 
 set -e
 
 DOWNLOAD_MODELS=false
 DOWNLOAD_DATASETS=false
+DOWNLOAD_GDRIVE=false
 
 # Parse arguments
 if [ $# -eq 0 ] || [ "$1" == "all" ]; then
     DOWNLOAD_MODELS=true
     DOWNLOAD_DATASETS=true
+    DOWNLOAD_GDRIVE=true
 elif [ "$1" == "models" ]; then
     DOWNLOAD_MODELS=true
 elif [ "$1" == "datasets" ]; then
     DOWNLOAD_DATASETS=true
+elif [ "$1" == "gdrive" ]; then
+    DOWNLOAD_GDRIVE=true
 else
-    echo "Usage: ./download.sh [models|datasets|all]"
+    echo "Usage: ./download.sh [models|datasets|gdrive|all]"
     echo ""
     echo "  models    - Download model weights only"
     echo "  datasets  - Download MipNeRF-360 dataset only"
-    echo "  all       - Download both (default)"
+    echo "  gdrive    - Download GaussianDreamerResults from Google Drive"
+    echo "  all       - Download everything (default)"
     exit 1
 fi
 
@@ -140,6 +145,39 @@ if [ "$DOWNLOAD_DATASETS" = true ]; then
     echo "   Location: ./datasets/360_v2/"
     echo "   Scenes: 7 (bicycle, bonsai, counter, garden, kitchen, room, stump)"
     echo "   Size: $(du -sh datasets/360_v2/ 2>/dev/null | cut -f1 || echo 'N/A')"
+    echo ""
+fi
+
+#=============================================================================
+# Download GaussianDreamerResults from Google Drive
+#=============================================================================
+if [ "$DOWNLOAD_GDRIVE" = true ]; then
+    echo "📦 Checking GaussianDreamerResults from Google Drive..."
+    echo ""
+    
+    FOLDER_ID="1_HPWBbc_t0YOq-kekFm7JoHMNXHxb5AP"
+    TARGET_DIR="GaussianDreamerResults"
+    
+    if [ -d "$TARGET_DIR" ] && [ "$(ls -A $TARGET_DIR 2>/dev/null)" ]; then
+        echo "  ✓ GaussianDreamerResults already exists"
+        echo "    Files: $(find $TARGET_DIR -type f | wc -l)"
+    else
+        # Check if gdown is installed
+        if ! command -v gdown &> /dev/null; then
+            echo "  ⬇ Installing gdown..."
+            pip install -q gdown
+        fi
+        
+        echo "  ⬇ Downloading GaussianDreamerResults from Google Drive..."
+        gdown --folder "https://drive.google.com/drive/folders/${FOLDER_ID}" -O "${TARGET_DIR}" --remaining-ok
+        
+        echo ""
+        echo "  ✅ GaussianDreamerResults downloaded!"
+    fi
+    
+    echo ""
+    echo "   Location: ./$TARGET_DIR/"
+    echo "   Files: $(find $TARGET_DIR -type f 2>/dev/null | wc -l || echo '0')"
     echo ""
 fi
 

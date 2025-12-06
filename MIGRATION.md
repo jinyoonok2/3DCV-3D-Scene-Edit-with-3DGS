@@ -90,11 +90,11 @@ Object generation (old steps 06-08) is now external:
 3. Place it in your project directory
 4. Run `python 06_place_object_at_roi.py`
 
-**Default object in configs/garden_config.yaml:****
+**Example object path in configs/garden_config.yaml:**
 ```yaml
 replacement:
   placement:
-    object_gaussians: "GaussianDreamer/sugarfine_3Dgs5000_densityestim02_sdfnorm02_level03_decim1000000_normalconsistency03_gaussperface55.ply"
+    object_gaussians: "GaussianDreamerResults/sugarfine_3Dgs5000_densityestim02_sdfnorm02_level03_decim1000000_normalconsistency03_gaussperface55.ply"
 ```
 
 ## Benefits of Conda

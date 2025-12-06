@@ -100,7 +100,9 @@ replacement:
   
   # Module 06 - Object Placement
   placement:
-    object_gaussians: "GaussianDreamer/sugarfine_3Dgs5000_densityestim02_sdfnorm02_level03_decim1000000_normalconsistency03_gaussperface55.ply"
+    object_gaussians: null                 # Path to object Gaussians (.pt or .ply from external generation)
+                                          # Example: "GaussianDreamerResults/your_object.ply"
+                                          # Generate externally using GaussianDreamer/GaussianDreamerPro
     roi_file: "outputs/${project.name}/04_roi_extraction/roi.pt"  # ROI from Module 04a
     scene_gaussians: "outputs/${project.name}/05_scene_editing/05c_optimized/ckpt_patched.pt"  # Scene after removal from Module 05c
     alignment_method: "depth"              # depth, manual, or auto
