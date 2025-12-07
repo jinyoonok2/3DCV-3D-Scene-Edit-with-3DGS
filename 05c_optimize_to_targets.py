@@ -127,6 +127,36 @@ def load_targets(targets_dir, device):
     return targets
 
 
+def create_comparison_grid_horizontal(original_img, inpainted_img, optimized_img, save_path):
+    """Create 3-panel comparison image in horizontal layout.
+    
+    Layout: [Original | Inpainted (05b) | Optimized (05c)]
+    """
+    # Ensure all images are same size
+    h = min(original_img.shape[0], inpainted_img.shape[0], optimized_img.shape[0])
+    w = min(original_img.shape[1], inpainted_img.shape[1], optimized_img.shape[1])
+    
+    original_img = original_img[:h, :w]
+    inpainted_img = inpainted_img[:h, :w]
+    optimized_img = optimized_img[:h, :w]
+    
+    # Create horizontal grid
+    grid = np.hstack([original_img, inpainted_img, optimized_img])
+    
+    # Add text labels
+    grid = grid.copy()
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.8
+    thickness = 2
+    color = (255, 255, 255)
+    
+    cv2.putText(grid, "Original", (10, 30), font, font_scale, color, thickness)
+    cv2.putText(grid, "Inpainted (05b)", (w + 10, 30), font, font_scale, color, thickness)
+    cv2.putText(grid, "Optimized (05c)", (2*w + 10, 30), font, font_scale, color, thickness)
+    
+    cv2.imwrite(str(save_path), grid)
+
+
 def main():
     args = parse_args()
     
@@ -164,14 +194,28 @@ def main():
     output_dir = Path(output_dir)
     
     renders_dir = output_dir / "renders" / "train"
+    comparisons_dir = output_dir / "comparisons"
     renders_dir.mkdir(parents=True, exist_ok=True)
+    comparisons_dir.mkdir(parents=True, exist_ok=True)
     
     console.print(f"[cyan]Checkpoint:[/cyan] {ckpt_path}")
     console.print(f"[cyan]Targets:[/cyan] {targets_dir}")
     console.print(f"[cyan]Output:[/cyan] {output_dir}")
     console.print(f"[cyan]Iterations:[/cyan] {iters}\n")
     
-    # Load checkpoint
+    # Load original checkpoint for comparison
+    console.print("[cyan]Loading original checkpoint for comparison...[/cyan]")
+    original_ckpt_path = config.get_checkpoint_path('initial')
+    original_ckpt = torch.load(original_ckpt_path, map_location=device)
+    if "gaussians" in original_ckpt:
+        original_params = original_ckpt["gaussians"]
+    elif "splats" in original_ckpt:
+        original_params = original_ckpt["splats"]
+    else:
+        original_params = original_ckpt
+    console.print(f"[green]✓ Loaded original checkpoint with {len(original_params['means']):,} Gaussians[/green]")
+    
+    # Load holed checkpoint
     console.print("[cyan]Loading holed checkpoint...[/cyan]")
     ckpt = torch.load(ckpt_path, map_location=device)
     params = ckpt["splats"]
@@ -331,9 +375,15 @@ def main():
     torch.save(final_ckpt, output_dir / "ckpt_patched.pt")
     console.print(f"[green]✓ Saved checkpoint[/green]")
     
-    # Render final views
-    console.print("[cyan]Rendering final views...[/cyan]")
+    # Render final views and create comparison grids
+    console.print("[cyan]Rendering final views and creating comparison grids...[/cyan]")
     colors_final = torch.cat([sh0, shN], 1)  # Concatenate for rendering
+    
+    # Prepare original checkpoint colors
+    original_sh0 = original_params["sh0"].to(device)
+    original_shN = original_params["shN"].to(device) if "shN" in original_params else torch.zeros_like(original_sh0)
+    original_colors = torch.cat([original_sh0, original_shN], 1)
+    
     for idx in tqdm(range(len(dataset)), desc="Rendering"):
         data = dataset[idx]
         camtoworld = data["camtoworld"].to(device)
@@ -344,7 +394,21 @@ def main():
         target = targets[idx]
         height, width = target.shape[:2]
         
-        render, _, _ = render_view(
+        # Render original
+        original_render, _, _ = render_view(
+            means=original_params["means"].to(device),
+            quats=original_params["quats"].to(device),
+            scales=original_params["scales"].to(device),
+            opacities=original_params["opacities"].to(device),
+            colors=original_colors,
+            viewmat=worldtoview,
+            K=K,
+            width=width,
+            height=height,
+        )
+        
+        # Render optimized (final)
+        optimized_render, _, _ = render_view(
             means=means,
             quats=quats,
             scales=scales,
@@ -356,10 +420,19 @@ def main():
             height=height,
         )
         
-        img_np = (render.detach().cpu().numpy() * 255).astype(np.uint8)
-        cv2.imwrite(str(renders_dir / f"{idx:05d}.png"), cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR))
+        # Convert to numpy BGR for saving
+        original_img = cv2.cvtColor((original_render.detach().cpu().numpy() * 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
+        inpainted_img = cv2.cvtColor((target.cpu().numpy() * 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
+        optimized_img = cv2.cvtColor((optimized_render.detach().cpu().numpy() * 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
+        
+        # Save individual optimized render
+        cv2.imwrite(str(renders_dir / f"{idx:05d}.png"), optimized_img)
+        
+        # Create and save comparison grid
+        comparison_path = comparisons_dir / f"{idx:05d}.png"
+        create_comparison_grid_horizontal(original_img, inpainted_img, optimized_img, comparison_path)
     
-    console.print(f"[green]✓ Saved final renders[/green]")
+    console.print(f"[green]✓ Saved final renders and comparison grids[/green]")
     
     # Plot loss curve
     plt.figure(figsize=(10, 5))
@@ -408,6 +481,8 @@ def main():
     console.print("\n[bold green]" + "="*80 + "[/bold green]")
     console.print("[bold green]✓ Module 05c Complete![/bold green]")
     console.print(f"[bold green]Output: {output_dir / 'ckpt_patched.pt'}[/bold green]")
+    console.print(f"[cyan]📁 Optimized renders: {len(dataset)} images in renders/train/[/cyan]")
+    console.print(f"[cyan]🔄 Comparison grids: {len(dataset)} images in comparisons/ (Original|Inpainted|Optimized)[/cyan]")
     console.print("[bold green]" + "="*80 + "[/bold green]\n")
 
 
