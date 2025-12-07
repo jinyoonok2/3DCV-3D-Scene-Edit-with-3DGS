@@ -75,8 +75,11 @@ source activate.sh
 **Object Generation (External):**
 - **GaussianDreamer** / **GaussianDreamerPro**
   - Text → 3D Gaussian objects (.ply files)
-  - Runs in separate Jupyter notebook
-  - Pre-generated objects provided
+  - **⚠️ Runs separately** in dedicated Jupyter notebook (not part of this pipeline)
+  - Pre-generated objects provided in `GaussianDreamerResults/`
+    - `coffee_cup_pro.ply` - for garden scene
+    - `cowboy_boots_pro.ply` - for kitchen scene
+  - To generate new objects: Use `Gaussian_Dreamer_pro_vastai.ipynb`
 
 ### Pipeline Flow
 ```
@@ -92,10 +95,14 @@ Dataset (COLMAP) → gsplat Training (30k iters)
                 ↓
     Optimize to Inpainted Targets (1k iters)
                 ↓
+      [EXTERNAL: GaussianDreamer generates .ply]
+                ↓
       Load Object Gaussians → Merge at ROI
                 ↓
     Final Visualization (4-panel comparisons)
 ```
+
+**Note**: Object generation happens outside this pipeline. Pre-generated objects are provided, or you can generate new ones using the GaussianDreamerPro notebook.
 
 ---
 
