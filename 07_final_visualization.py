@@ -170,8 +170,8 @@ def create_comparison_grid(original_img, inpainted_img, optimized_img, merged_im
     
     Layout:
     Top-left: Original
-    Top-right: Inpainted/Removed (05a)
-    Bottom-left: Optimized (05c)
+    Top-right: Inpainted (05c optimized)
+    Bottom-left: Removed (05a)
     Bottom-right: Final with Object (merged)
     """
     # Ensure all images are same size
@@ -183,7 +183,7 @@ def create_comparison_grid(original_img, inpainted_img, optimized_img, merged_im
     optimized_img = optimized_img[:h, :w]
     merged_img = merged_img[:h, :w]
     
-    # Create 2x2 grid
+    # Create 2x2 grid - swapped inpainted and optimized positions
     top_row = np.hstack([original_img, inpainted_img])
     bottom_row = np.hstack([optimized_img, merged_img])
     grid = np.vstack([top_row, bottom_row])
@@ -196,8 +196,8 @@ def create_comparison_grid(original_img, inpainted_img, optimized_img, merged_im
     color = (255, 255, 255)
     
     cv2.putText(grid, "Original", (10, 30), font, font_scale, color, thickness)
-    cv2.putText(grid, "Removed", (w + 10, 30), font, font_scale, color, thickness)
-    cv2.putText(grid, "Optimized", (10, h + 30), font, font_scale, color, thickness)
+    cv2.putText(grid, "Inpainted", (w + 10, 30), font, font_scale, color, thickness)
+    cv2.putText(grid, "Removed", (10, h + 30), font, font_scale, color, thickness)
     cv2.putText(grid, "With Object", (w + 10, h + 30), font, font_scale, color, thickness)
     
     cv2.imwrite(str(save_path), grid)
@@ -289,8 +289,12 @@ def main():
     if args.inpainted_ckpt:
         inpainted_ckpt = Path(args.inpainted_ckpt)
     else:
-        # This is the removed/holed checkpoint from 05a (before inpainting)
-        inpainted_ckpt = config.get_path('inpainting') / '05a_holed' / 'ckpt_holed.pt'
+        # This should be the same as optimized - the final inpainted result from 05c
+        # But we keep the parameter name for backwards compatibility
+        inpainted_ckpt = config.get_path('inpainting') / '05c_optimized' / 'ckpt_patched.pt'
+    
+    # Also need the removed checkpoint for comparison
+    removed_ckpt = config.get_path('inpainting') / '05a_holed' / 'ckpt_holed.pt'
     
     if args.original_ckpt:
         original_ckpt = Path(args.original_ckpt)
@@ -300,8 +304,8 @@ def main():
     # Verify all checkpoints exist
     for name, ckpt_path in [
         ("Merged", merged_ckpt),
-        ("Optimized", optimized_ckpt),
-        ("Removed", inpainted_ckpt),
+        ("Optimized/Inpainted", optimized_ckpt),
+        ("Removed", removed_ckpt),
         ("Original", original_ckpt)
     ]:
         if not ckpt_path.exists():
@@ -322,8 +326,8 @@ def main():
     comparisons_dir.mkdir(parents=True, exist_ok=True)
     
     console.print(f"Original checkpoint: {original_ckpt}")
-    console.print(f"Removed checkpoint: {inpainted_ckpt}")
-    console.print(f"Optimized checkpoint: {optimized_ckpt}")
+    console.print(f"Removed checkpoint: {removed_ckpt}")
+    console.print(f"Inpainted checkpoint: {inpainted_ckpt}")
     console.print(f"Merged checkpoint: {merged_ckpt}")
     console.print(f"Data root: {data_root}")
     console.print(f"Output: {output_dir}\n")
@@ -333,8 +337,8 @@ def main():
     # Load all checkpoints
     console.print("[cyan]Loading checkpoints...[/cyan]")
     original_params = load_checkpoint(original_ckpt, device)
-    removed_params = load_checkpoint(inpainted_ckpt, device)  # This is 05a removed/holed
-    optimized_params = load_checkpoint(optimized_ckpt, device)
+    removed_params = load_checkpoint(removed_ckpt, device)  # This is 05a removed/holed
+    inpainted_params = load_checkpoint(inpainted_ckpt, device)  # This is 05c optimized/inpainted
     merged_params = load_checkpoint(merged_ckpt, device)
     console.print("✓ All checkpoints loaded\n")
     
@@ -362,8 +366,8 @@ def main():
         # Render all 4 stages
         try:
             original_render = render_view(original_params, camtoworld, K, width, height, device)
+            inpainted_render = render_view(inpainted_params, camtoworld, K, width, height, device)
             removed_render = render_view(removed_params, camtoworld, K, width, height, device)
-            optimized_render = render_view(optimized_params, camtoworld, K, width, height, device)
             merged_render = render_view(merged_params, camtoworld, K, width, height, device)
         except Exception as e:
             console.print(f"[yellow]Warning: Failed to render view {i}: {e}[/yellow]")
@@ -371,8 +375,8 @@ def main():
         
         # Convert to numpy BGR for OpenCV
         original_img = cv2.cvtColor((torch.clamp(original_render, 0, 1).cpu().numpy() * 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
+        inpainted_img = cv2.cvtColor((torch.clamp(inpainted_render, 0, 1).cpu().numpy() * 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
         removed_img = cv2.cvtColor((torch.clamp(removed_render, 0, 1).cpu().numpy() * 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
-        optimized_img = cv2.cvtColor((torch.clamp(optimized_render, 0, 1).cpu().numpy() * 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
         merged_img = cv2.cvtColor((torch.clamp(merged_render, 0, 1).cpu().numpy() * 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
         
         # Save merged result (final image only)
@@ -380,8 +384,9 @@ def main():
         cv2.imwrite(str(merged_path), merged_img)
         
         # Create 4-panel comparison grid
+        # Grid layout: [Original | Inpainted] / [Removed | With Object]
         comparison_path = comparisons_dir / f"{i:05d}.png"
-        create_comparison_grid(original_img, removed_img, optimized_img, merged_img, comparison_path)
+        create_comparison_grid(original_img, inpainted_img, removed_img, merged_img, comparison_path)
         comparison_paths.append(str(comparison_path))
         
         # Compute metrics (original vs final merged)
@@ -456,7 +461,7 @@ def main():
     console.print(f"\n[green]✓ Module 07 complete![/green]")
     console.print(f"📁 Output directory: {output_dir}")
     console.print(f"🖼️  Merged renders: {len(comparison_paths)} images in merged/")
-    console.print(f"🔄 Comparison grids: {len(comparison_paths)} images in comparisons/ (2x2: Original|Removed|Optimized|Final)")
+    console.print(f"🔄 Comparison grids: {len(comparison_paths)} images in comparisons/ (2x2: Original|Inpainted|Removed|Final)")
     console.print(f"\n[cyan]💡 To create GIF from merged results:[/cyan]")
     console.print(f"  ffmpeg -framerate 10 -pattern_type glob -i '{merged_dir}/*.png' -vf scale=1920:-1 {output_dir}/merged_animation.gif")
     console.print(f"\n[cyan]💡 To create GIF from 4-panel comparisons:[/cyan]")
