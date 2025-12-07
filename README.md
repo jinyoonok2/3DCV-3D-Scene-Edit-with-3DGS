@@ -38,7 +38,68 @@ source activate.sh
 
 **Note**: The download script automatically checks for existing files and only downloads what's missing.
 
-### Run Full Pipeline
+---
+
+## Technical Overview
+
+### Dataset
+- **MipNeRF-360 Dataset** (Barron et al., 2022)
+  - High-quality real-world scenes with COLMAP reconstruction
+  - Scenes used: Garden, Kitchen
+  - ~185 images per scene, downsampled 4x (factor=4)
+
+### Core Frameworks & Models
+
+**3D Representation & Rendering:**
+- **gsplat** - 3D Gaussian Splatting implementation
+  - Real-time differentiable rendering
+  - ~6.4M Gaussians per scene
+  - 30k training iterations (~30-60 min on RTX 4090)
+
+**Object Segmentation:**
+- **GroundingDINO** - Open-vocabulary object detection
+  - Text prompt → bounding boxes
+  - Model: GroundingDINO-T (Swin Transformer backbone)
+- **SAM2** - Segment Anything Model 2
+  - Bounding box → precise pixel masks
+  - Model: sam2_hiera_large
+
+**Inpainting:**
+- **LaMa** (Large Mask Inpainting, default)
+  - Fast texture completion (~0.5s/image)
+  - No hallucination, clean backgrounds
+- **SDXL Inpainting** (alternative, for ablation)
+  - Text-guided creative inpainting
+  - Slower (~40s/image), may add artifacts
+
+**Object Generation (External):**
+- **GaussianDreamer** / **GaussianDreamerPro**
+  - Text → 3D Gaussian objects (.ply files)
+  - Runs in separate Jupyter notebook
+  - Pre-generated objects provided
+
+### Pipeline Flow
+```
+Dataset (COLMAP) → gsplat Training (30k iters)
+                ↓
+        Render Training Views
+                ↓
+     GroundingDINO + SAM2 (text → masks)
+                ↓
+        2D Masks → 3D ROI (depth-based voting)
+                ↓
+      Remove Gaussians → LaMa Inpaint
+                ↓
+    Optimize to Inpainted Targets (1k iters)
+                ↓
+      Load Object Gaussians → Merge at ROI
+                ↓
+    Final Visualization (4-panel comparisons)
+```
+
+---
+
+## Run Full Pipeline
 
 **Using the shell script (easiest):**
 ```bash
