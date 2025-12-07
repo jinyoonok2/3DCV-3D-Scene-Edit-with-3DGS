@@ -457,8 +457,6 @@ def main():
     console.print(f"📁 Output directory: {output_dir}")
     console.print(f"🖼️  Merged renders: {len(comparison_paths)} images in merged/")
     console.print(f"🔄 Comparison grids: {len(comparison_paths)} images in comparisons/ (2x2: Original|Removed|Optimized|Final)")
-    if args.summary_grid:
-    console.print(f"📊 Summary grid: summary_grid.png")
     console.print(f"\n[cyan]💡 To create GIF from merged results:[/cyan]")
     console.print(f"  ffmpeg -framerate 10 -pattern_type glob -i '{merged_dir}/*.png' -vf scale=1920:-1 {output_dir}/merged_animation.gif")
     console.print(f"\n[cyan]💡 To create GIF from 4-panel comparisons:[/cyan]")
