@@ -284,7 +284,7 @@ def main():
     if args.optimized_ckpt:
         optimized_ckpt = Path(args.optimized_ckpt)
     else:
-        optimized_ckpt = config.get_path('inpainting') / '05c_optimized' / 'ckpt_final.pt'
+        optimized_ckpt = config.get_path('inpainting') / '05c_optimized' / 'ckpt_patched.pt'
     
     if args.inpainted_ckpt:
         inpainted_ckpt = Path(args.inpainted_ckpt)
