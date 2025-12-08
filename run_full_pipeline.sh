@@ -32,6 +32,9 @@ python 03_ground_text_to_masks.py --config "$CONFIG"
 echo -e "\n[04a] Lifting masks to 3D ROI..."
 python 04a_lift_masks_to_roi3d.py --config "$CONFIG"
 
+echo -e "\n[04b] Visualizing ROI..."
+python 04b_visualize_roi.py --config "$CONFIG"
+
 echo -e "\n[05a] Removing and rendering holes..."
 python 05a_remove_and_render_holes.py --config "$CONFIG"
 
