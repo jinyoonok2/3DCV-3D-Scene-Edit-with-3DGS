@@ -23,16 +23,16 @@ ffmpeg -y -framerate 10 -pattern_type glob -i 'outputs/garden_brownplant_removal
 
 # Kitchen Scene
 echo -e "\n[Kitchen] Creating animations..."
-mkdir -p outputs/kitchen_plate_removal/animations
+mkdir -p outputs/kitchen_yellowtracker_removal/animations
 
 echo "  - 07 merged..."
-ffmpeg -y -framerate 10 -pattern_type glob -i 'outputs/kitchen_plate_removal/07_final_visualization/merged/*.png' -vf scale=1920:-1 outputs/kitchen_plate_removal/animations/07_merged.gif
+ffmpeg -y -framerate 10 -pattern_type glob -i 'outputs/kitchen_yellowtracker_removal/07_final_visualization/merged/*.png' -vf scale=1920:-1 outputs/kitchen_yellowtracker_removal/animations/07_merged.gif
 
 echo "  - 07 comparison..."
-ffmpeg -y -framerate 10 -pattern_type glob -i 'outputs/kitchen_plate_removal/07_final_visualization/comparisons/*.png' -vf scale=1920:-1 outputs/kitchen_plate_removal/animations/07_comparison.gif
+ffmpeg -y -framerate 10 -pattern_type glob -i 'outputs/kitchen_yellowtracker_removal/07_final_visualization/comparisons/*.png' -vf scale=1920:-1 outputs/kitchen_yellowtracker_removal/animations/07_comparison.gif
 
 echo "  - 05c comparison..."
-ffmpeg -y -framerate 10 -pattern_type glob -i 'outputs/kitchen_plate_removal/05_scene_editing/05c_optimized/comparisons/*.png' -vf scale=1920:-1 outputs/kitchen_plate_removal/animations/05c_comparison.gif
+ffmpeg -y -framerate 10 -pattern_type glob -i 'outputs/kitchen_yellowtracker_removal/05_scene_editing/05c_optimized/comparisons/*.png' -vf scale=1920:-1 outputs/kitchen_yellowtracker_removal/animations/05c_comparison.gif
 
 echo -e "\n=========================================="
 echo "✓ All animations created successfully!"
@@ -43,7 +43,7 @@ echo "    - 07_merged.gif"
 echo "    - 07_comparison.gif"
 echo "    - 05c_comparison.gif"
 echo -e "\nKitchen animations:"
-echo "  outputs/kitchen_plate_removal/animations/"
+echo "  outputs/kitchen_yellowtracker_removal/animations/"
 echo "    - 07_merged.gif"
 echo "    - 07_comparison.gif"
 echo "    - 05c_comparison.gif"
