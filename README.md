@@ -2,10 +2,6 @@
 
 **Select an object with text, remove it from a reconstructed scene, restore the background, and insert a generated 3D asset.**
 
-This project explores text-guided editing of real-world scenes represented as 3D Gaussian Splatting (3DGS). It connects **gsplat, GroundingDINO, SAM2, LaMa, and GaussianDreamerPro** into a pipeline that edits Gaussian parameters and renders the result from multiple viewpoints.
-
-The central challenge is connecting a text description to the right 3D volume. A 2D mask can accidentally select background geometry, deleting visible Gaussians can leave internal density behind, and a generated object can look out of place in a captured scene. The experiments below show both the editing workflow and these remaining limitations.
-
 ![Garden scene across viewpoints: original plant, restored background, removed Gaussians, and inserted coffee cup](assets/readme/garden-editing.gif)
 
 *Garden experiment: replace the brown plant with a generated coffee cup. In this animation, the panels are **original** (top left), **inpainted and optimized** (top right), **removed before restoration** (bottom left), and **with inserted object** (bottom right). The cup is small at this scene scale.*
@@ -14,7 +10,11 @@ The central challenge is connecting a text description to the right 3D volume. A
 
 ## Project overview
 
+This project explores text-guided editing of real-world scenes represented as 3D Gaussian Splatting (3DGS). It connects **gsplat, GroundingDINO, SAM2, LaMa, and GaussianDreamerPro** into a pipeline that edits Gaussian parameters and renders the result from multiple viewpoints.
+
 Rather than independently editing every training image and rebuilding the scene, this implementation selects and removes Gaussians in 3D. Inpainted 2D views then provide targets for refining the remaining scene. New objects are generated separately as Gaussian assets and merged into the edited checkpoint.
+
+The central challenge is connecting a text description to the right 3D volume. A 2D mask can accidentally select background geometry, deleting visible Gaussians can leave internal density behind, and a generated object can look out of place in a captured scene. The experiments below show both the editing workflow and these remaining limitations.
 
 The project combines three main operations:
 
@@ -75,7 +75,7 @@ GaussianDreamer/GaussianDreamerPro runs separately in the supplied notebooks. Th
 
 ## Visual walkthrough
 
-### From text to an object mask
+### 1. From text to an object mask
 
 In the Garden scene, the prompt `brown plant` can match several plants. A configured reference box helps select the plant on the table; SAM2 then refines the detection into a pixel mask.
 
@@ -83,13 +83,23 @@ In the Garden scene, the prompt `brown plant` can match several plants. A config
 | --- | --- |
 | ![Candidate brown-plant detections, a reference box, and the selected plant on the table](assets/readme/garden-detection.jpg) | ![SAM2 mask over the selected plant and pot](assets/readme/garden-segmentation.jpg) |
 
-### From a 2D mask to a 3D region
+### 2. From a 2D mask to a 3D region
 
 ![Projected 3D ROI, corresponding SAM mask, and their overlay in the Garden scene](assets/readme/garden-roi-projection.png)
 
 *The projected ROI is compared with the SAM mask to inspect whether the selected 3D region covers the intended object. This is a diagnostic view, rather than proof of complete volumetric removal.*
 
-### A harder case: Kitchen
+### 3. Remove the object and restore the background
+
+Once the selected Gaussians are removed, LaMa completes the background in each view (stage 05b). These images become targets for optimizing the remaining 3D Gaussians (stage 05c).
+
+![Animated Garden restoration comparison: original scene, LaMa-inpainted targets, and optimized 3D scene across the same viewpoints](assets/readme/garden-restoration.gif)
+
+*Left to right: **original scene**, **LaMa-inpainted target images (05b)**, and **renders of the optimized 3D scene (05c)**. Watch the tabletop where the plant used to be as the viewpoint changes. The center panel shows 2D completion targets; the right panel shows how the shared 3D representation fits them.*
+
+### 4. Insert a generated object: Kitchen experiment
+
+After restoration, the placement stage transforms an externally generated Gaussian asset and merges it into the scene (stage 06). Stage 07 renders all four checkpoints from matching cameras so the effect of each stage can be compared.
 
 ![Kitchen scene across viewpoints: original yellow toy, restored background, removal artifacts, and inserted cowboy boot](assets/readme/kitchen-editing.gif)
 
@@ -100,7 +110,7 @@ In the Garden scene, the prompt `brown plant` can match several plants. A config
 | Garden | `brown plant`, with reference-box guidance | `coffee_cup_pro.ply` | Demonstrates selection, removal, restoration, and insertion across viewpoints |
 | Kitchen | `yellow tracker toy`, without a reference box | `cowboy_boots_pro.ply` | Exposes selection failures on thin geometry, removal remnants, and appearance mismatch |
 
-The five visuals above were selected from the final presentation. Smaller previews are stored in [`assets/readme/`](assets/readme/). The README animations use reduced resolution, frame rate, and color palettes to keep download sizes smaller.
+The six visuals above were selected from the final presentation. Previews are stored in [`assets/readme/`](assets/readme/). The opening and Kitchen animations use reduced resolution, frame rate, and color palettes to keep download sizes smaller; the restoration animation retains its original resolution and frame rate.
 
 ## Findings and limitations
 
